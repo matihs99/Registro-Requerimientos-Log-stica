@@ -1,0 +1,18 @@
+{
+  "name": "Sistema de Requerimientos Logísticos",
+  "short_name": "Req. Logísticos",
+  "description": "Gestión de requerimientos de Izajes, Carga Terrestre, Caminos y Cargas Líquidas",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#1e3a5f",
+  "theme_color": "#2563eb",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
