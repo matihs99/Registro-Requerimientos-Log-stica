@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Fondo -->
+  <rect width="512" height="512" fill="#2563eb" rx="90"/>
+  <!-- Torre de grúa vertical -->
+  <rect x="236" y="120" width="36" height="260" fill="white" rx="6"/>
+  <!-- Brazo horizontal -->
+  <rect x="90" y="120" width="300" height="32" fill="white" rx="6"/>
+  <!-- Contrapeso -->
+  <rect x="78" y="152" width="70" height="55" fill="#93c5fd" rx="6"/>
+  <!-- Cable -->
+  <rect x="352" y="152" width="7" height="110" fill="white"/>
+  <!-- Gancho -->
+  <path d="M355 262 Q380 280 358 308 Q338 326 348 348" stroke="white" stroke-width="9" fill="none" stroke-linecap="round"/>
+  <!-- Base -->
+  <rect x="196" y="368" width="116" height="28" fill="white" rx="6"/>
+  <!-- Ruedas -->
+  <circle cx="228" cy="412" r="26" fill="#1d4ed8"/>
+  <circle cx="284" cy="412" r="26" fill="#1d4ed8"/>
+  <circle cx="228" cy="412" r="14" stroke="white" stroke-width="6" fill="none"/>
+  <circle cx="284" cy="412" r="14" stroke="white" stroke-width="6" fill="none"/>
+</svg>
