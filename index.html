@@ -9,505 +9,687 @@
   <meta name="apple-mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-title" content="Req. Logísticos"/>
   <link rel="apple-touch-icon" href="./icon.svg"/>
-
-  <!-- Firebase -->
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
-  <!-- React + Babel -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
-
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:system-ui,sans-serif;background:#f1f5f9}
     input,select,textarea,button{font-family:inherit}
     ::-webkit-scrollbar{width:6px;height:6px}
-    ::-webkit-scrollbar-track{background:#f1f5f9}
     ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:99px}
   </style>
 </head>
 <body>
 <div id="root"></div>
-
-<!-- Firebase init (fuera de Babel) -->
 <script>
   firebase.initializeApp({
-    apiKey: "AIzaSyC1nDCKYVu5NLm4ofpRyYs4eaE-LN88QNI",
-    authDomain: "requerimientos-logisticos.firebaseapp.com",
-    projectId: "requerimientos-logisticos",
-    storageBucket: "requerimientos-logisticos.firebasestorage.app",
-    messagingSenderId: "603682254229",
-    appId: "1:603682254229:web:07677cbdee61711f1c5a9c"
+    apiKey:"AIzaSyC1nDCKYVu5NLm4ofpRyYs4eaE-LN88QNI",
+    authDomain:"requerimientos-logisticos.firebaseapp.com",
+    projectId:"requerimientos-logisticos",
+    storageBucket:"requerimientos-logisticos.firebasestorage.app",
+    messagingSenderId:"603682254229",
+    appId:"1:603682254229:web:07677cbdee61711f1c5a9c"
   });
   const db = firebase.firestore();
-
-  // Persistencia offline: guarda datos en el dispositivo y sincroniza al recuperar señal
-  db.enablePersistence({ synchronizeTabs: true })
-    .catch(e => console.warn('Persistence:', e.code));
-
-  // Registrar Service Worker (PWA)
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () =>
-      navigator.serviceWorker.register('./service-worker.js')
-        .catch(e => console.warn('SW:', e))
-    );
-  }
+  db.enablePersistence({synchronizeTabs:true}).catch(e=>console.warn('Persistence:',e.code));
+  if('serviceWorker' in navigator)
+    window.addEventListener('load',()=>navigator.serviceWorker.register('./service-worker.js').catch(()=>{}));
 </script>
-
 <script type="text/babel">
-  const { useState, useEffect } = React;
-  const COL = 'requerimientos';
+const {useState,useEffect} = React;
+const COL = 'requerimientos';
 
-  const SERVICIOS  = ["Izajes","Carga Terrestre","Mantenimiento de Caminos","Cargas Líquidas"];
-  const ESTADOS    = ["Pendiente","En Proceso","Completado","Cancelado"];
-  const PRIORIDADES= ["Baja","Media","Alta","Urgente"];
-  const LOCACIONES = ["La Calera","Bajo del Choique","Rio Colorado"];
-  const EQUIPOS    = ["Grúa 25T","Grúa 50T","Grúa 70T","Grúa 130T","Hidrogrúa",
-                      "Camión Cisterna","Camión Regador","Camión Pluma","Camión Volcador",
-                      "Motoniveladora","Pala Cargadora"];
+const SERVICIOS   = ["Izajes","Carga Terrestre","Mantenimiento de Caminos","Cargas Líquidas"];
+const ESTADOS     = ["Pendiente","En Proceso","Completado","Cancelado"];
+const PRIORIDADES = ["Baja","Media","Alta","Urgente"];
+const LOCACIONES  = ["La Calera","Bajo del Choique","Rio Colorado"];
 
-  const estadoColor    = {Pendiente:"#f59e0b","En Proceso":"#3b82f6",Completado:"#10b981",Cancelado:"#6b7280"};
-  const servicioIcon   = {Izajes:"🏗️","Carga Terrestre":"🚛","Mantenimiento de Caminos":"🛤️","Cargas Líquidas":"🛢️"};
-  const prioridadColor = {Baja:"#10b981",Media:"#f59e0b",Alta:"#ef4444",Urgente:"#7c3aed"};
+const EQUIPOS_POR_SERVICIO = {
+  "Izajes":                  ["Grúa 25T","Grúa 50T","Grúa 70T","Grúa 130T","Hidrogrúa"],
+  "Carga Terrestre":         ["Semirremolque","Hidrogrúa","Cama Baja","Furgón","Playo"],
+  "Mantenimiento de Caminos":["Motoniveladora","Pala Cargadora","Camión Regador","Camión Volcador","Camión de Riego"],
+  "Cargas Líquidas":         ["Camión Cisterna"],
+};
 
-  const emptyRecurso  = () => ({equipo:"",custom:"",cantidad:1});
-  const emptyAsignado = () => ({equipo:"",custom:"",cantidad:1,proveedor:"",responsable:""});
+const estadoColor    = {Pendiente:"#f59e0b","En Proceso":"#3b82f6",Completado:"#10b981",Cancelado:"#6b7280"};
+const servicioIcon   = {Izajes:"🏗️","Carga Terrestre":"🚛","Mantenimiento de Caminos":"🛤️","Cargas Líquidas":"🛢️"};
+const prioridadColor = {Baja:"#10b981",Media:"#f59e0b",Alta:"#ef4444",Urgente:"#7c3aed"};
 
-  // ── Componentes reutilizables ──────────────────────────────────────────────
+const emptyRecurso  = () => ({equipo:"",custom:"",cantidad:1});
+const emptyAsignado = () => ({equipo:"",custom:"",cantidad:1,proveedor:"",responsable:""});
+const emptyPersona  = () => ({nombre:"",telefono:""});
 
-  function Badge({color,text}){
-    return <span style={{background:color+"20",color,border:`1px solid ${color}40`,borderRadius:6,padding:"2px 10px",fontSize:12,fontWeight:600,whiteSpace:"nowrap"}}>{text}</span>;
-  }
+const emptyReq = () => ({
+  area:"", locacion:"", servicio:"", fechaRequerida:"", observaciones:"", prioridad:"Media",
+  recursosSolicitados:[emptyRecurso()],
+  // Cross
+  contactos:[emptyPersona()],
+  responsablesPermiso:[emptyPersona()],
+  imputacionCosto:"",
+  // Carga Terrestre
+  origen:"", contactoOrigen:{nombre:"",telefono:""},
+  destino:"", contactoDestino:{nombre:"",telefono:""},
+  pesoDimensionesCarga:"",
+  // Izajes
+  pesoEquipoIzar:"", dimensionesEquipoIzar:"", distanciaEquipo:"",
+});
 
-  function StatCard({label,value,color,icon}){
-    return(
-      <div style={{background:"#fff",border:"1px solid #e5e7eb",borderRadius:10,padding:"16px 20px",flex:1,minWidth:130}}>
-        <div style={{fontSize:22}}>{icon}</div>
-        <div style={{fontSize:28,fontWeight:700,color}}>{value}</div>
-        <div style={{fontSize:13,color:"#6b7280",marginTop:2}}>{label}</div>
+// ── Utilidades UI ──────────────────────────────────────────────────────────
+function Badge({color,text}){
+  return <span style={{background:color+"20",color,border:`1px solid ${color}40`,borderRadius:6,padding:"2px 10px",fontSize:12,fontWeight:600,whiteSpace:"nowrap"}}>{text}</span>;
+}
+function StatCard({label,value,color,icon}){
+  return(
+    <div style={{background:"#fff",border:"1px solid #e5e7eb",borderRadius:10,padding:"16px 20px",flex:1,minWidth:130}}>
+      <div style={{fontSize:22}}>{icon}</div>
+      <div style={{fontSize:28,fontWeight:700,color}}>{value}</div>
+      <div style={{fontSize:13,color:"#6b7280",marginTop:2}}>{label}</div>
+    </div>
+  );
+}
+function MiniBar({label,value,max,color}){
+  return(
+    <div style={{marginBottom:10}}>
+      <div style={{display:"flex",justifyContent:"space-between",fontSize:13,marginBottom:4}}>
+        <span>{label}</span><span style={{fontWeight:600}}>{value}</span>
       </div>
-    );
-  }
+      <div style={{background:"#f3f4f6",borderRadius:99,height:8}}>
+        <div style={{background:color,borderRadius:99,height:8,width:`${max?(value/max)*100:0}%`,transition:"width .4s"}}/>
+      </div>
+    </div>
+  );
+}
+function StatusBar({online,pendingWrites}){
+  const [bg,brd,color,msg] = online
+    ? pendingWrites
+      ? ["#fffbeb","#fde68a","#92400e","⏳ Sincronizando datos con la nube..."]
+      : ["#f0fdf4","#bbf7d0","#166534","🟢 En línea — datos sincronizados"]
+    : ["#fef2f2","#fecaca","#991b1b","🔴 Sin conexión — los datos se guardan localmente y se sincronizarán al recuperar señal"];
+  return <div style={{background:bg,borderBottom:`1px solid ${brd}`,padding:"7px 20px",fontSize:12,fontWeight:600,color}}>{msg}</div>;
+}
 
-  function MiniBar({label,value,max,color}){
-    return(
-      <div style={{marginBottom:10}}>
-        <div style={{display:"flex",justifyContent:"space-between",fontSize:13,marginBottom:4}}>
-          <span>{label}</span><span style={{fontWeight:600}}>{value}</span>
+// ── Editores dinámicos ─────────────────────────────────────────────────────
+function PersonasEditor({personas,onChange,titulo,placeholder="Nombre"}){
+  const add    = ()=>onChange([...personas,emptyPersona()]);
+  const remove = i=>onChange(personas.filter((_,idx)=>idx!==i));
+  const upd    = (i,f,v)=>onChange(personas.map((p,idx)=>idx===i?{...p,[f]:v}:p));
+  const fs = {padding:"8px 10px",borderRadius:6,border:"1.5px solid #d1d5db",fontSize:13,outline:"none",background:"#fff",boxSizing:"border-box"};
+  return(
+    <div>
+      {personas.map((p,i)=>(
+        <div key={i} style={{display:"flex",gap:8,marginBottom:8,alignItems:"center",flexWrap:"wrap"}}>
+          <input style={{...fs,flex:2,minWidth:140}} value={p.nombre} onChange={e=>upd(i,"nombre",e.target.value)} placeholder={placeholder}/>
+          <div style={{position:"relative",flex:1,minWidth:120}}>
+            <span style={{position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",fontSize:14}}>📱</span>
+            <input style={{...fs,width:"100%",paddingLeft:28}} value={p.telefono} onChange={e=>upd(i,"telefono",e.target.value)} placeholder="Teléfono" type="tel"/>
+          </div>
+          <button onClick={()=>remove(i)} disabled={personas.length===1}
+            style={{background:"#fef2f2",color:"#ef4444",border:"1px solid #fecaca",borderRadius:6,padding:"8px 10px",cursor:personas.length===1?"not-allowed":"pointer",opacity:personas.length===1?0.4:1,fontSize:13}}>✕</button>
         </div>
-        <div style={{background:"#f3f4f6",borderRadius:99,height:8}}>
-          <div style={{background:color,borderRadius:99,height:8,width:`${max?(value/max)*100:0}%`,transition:"width .4s"}}/>
-        </div>
-      </div>
-    );
-  }
+      ))}
+      <button onClick={add} style={{background:"#eff6ff",color:"#2563eb",border:"1px dashed #93c3fd",borderRadius:7,padding:"7px 14px",cursor:"pointer",fontSize:13,fontWeight:600,width:"100%"}}>+ Agregar {titulo}</button>
+    </div>
+  );
+}
 
-  function StatusBar({online,pendingWrites}){
-    const bg    = online ? (pendingWrites ? "#fffbeb" : "#f0fdf4") : "#fef2f2";
-    const brd   = online ? (pendingWrites ? "#fde68a" : "#bbf7d0") : "#fecaca";
-    const color = online ? (pendingWrites ? "#92400e" : "#166534") : "#991b1b";
-    const msg   = online
-      ? (pendingWrites ? "⏳ Sincronizando datos con la nube..." : "🟢 En línea — datos sincronizados")
-      : "🔴 Sin conexión — los datos se guardan en este dispositivo y se sincronizarán automáticamente al recuperar señal";
-    return(
-      <div style={{background:bg,borderBottom:`1px solid ${brd}`,padding:"7px 20px",fontSize:12,fontWeight:600,color,display:"flex",alignItems:"center",gap:6}}>
-        {msg}
-      </div>
-    );
-  }
-
-  function RecursosEditor({recursos,onChange,asignacion=false}){
-    const add    = () => onChange([...recursos, asignacion ? emptyAsignado() : emptyRecurso()]);
-    const remove = i  => onChange(recursos.filter((_,idx)=>idx!==i));
-    const update = (i,f,v) => onChange(recursos.map((r,idx)=>idx===i?{...r,[f]:v}:r));
-    const fs = {padding:"7px 10px",borderRadius:6,border:"1.5px solid #d1d5db",fontSize:13,outline:"none",background:"#fff",boxSizing:"border-box"};
-    return(
-      <div>
-        {recursos.map((r,i)=>(
-          <div key={i} style={{background:"#f8fafc",border:"1px solid #e5e7eb",borderRadius:8,padding:12,marginBottom:10}}>
-            <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"flex-end"}}>
-              <div style={{flex:2,minWidth:160}}>
-                {i===0&&<div style={{fontSize:12,fontWeight:600,color:"#6b7280",marginBottom:4}}>Equipo</div>}
-                <select style={{...fs,width:"100%"}} value={r.equipo} onChange={e=>update(i,"equipo",e.target.value)}>
-                  <option value="">Seleccioná...</option>
-                  {EQUIPOS.map(eq=><option key={eq} value={eq}>{eq}</option>)}
-                  <option value="__custom__">✏️ Otro...</option>
-                </select>
-                {r.equipo==="__custom__"&&<input style={{...fs,width:"100%",marginTop:6}} value={r.custom} onChange={e=>update(i,"custom",e.target.value)} placeholder="Describí el equipo..."/>}
+function RecursosEditor({recursos,onChange,servicio,asignacion=false}){
+  const equiposDisp = servicio ? (EQUIPOS_POR_SERVICIO[servicio]||[]) : Object.values(EQUIPOS_POR_SERVICIO).flat();
+  const add    = ()=>onChange([...recursos,asignacion?emptyAsignado():emptyRecurso()]);
+  const remove = i=>onChange(recursos.filter((_,idx)=>idx!==i));
+  const upd    = (i,f,v)=>onChange(recursos.map((r,idx)=>idx===i?{...r,[f]:v}:r));
+  const fs = {padding:"7px 10px",borderRadius:6,border:"1.5px solid #d1d5db",fontSize:13,outline:"none",background:"#fff",boxSizing:"border-box"};
+  return(
+    <div>
+      {recursos.map((r,i)=>(
+        <div key={i} style={{background:"#f8fafc",border:"1px solid #e5e7eb",borderRadius:8,padding:12,marginBottom:10}}>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"flex-end"}}>
+            <div style={{flex:2,minWidth:160}}>
+              {i===0&&<div style={{fontSize:12,fontWeight:600,color:"#6b7280",marginBottom:4}}>Equipo</div>}
+              <select style={{...fs,width:"100%"}} value={r.equipo} onChange={e=>upd(i,"equipo",e.target.value)}>
+                <option value="">Seleccioná...</option>
+                {equiposDisp.map(eq=><option key={eq} value={eq}>{eq}</option>)}
+                <option value="__custom__">✏️ Otro...</option>
+              </select>
+              {r.equipo==="__custom__"&&<input style={{...fs,width:"100%",marginTop:6}} value={r.custom} onChange={e=>upd(i,"custom",e.target.value)} placeholder="Describí el equipo..."/>}
+            </div>
+            <div style={{width:80}}>
+              {i===0&&<div style={{fontSize:12,fontWeight:600,color:"#6b7280",marginBottom:4}}>Cantidad</div>}
+              <input type="number" min={1} style={{...fs,width:"100%",textAlign:"center"}} value={r.cantidad} onChange={e=>upd(i,"cantidad",Math.max(1,parseInt(e.target.value)||1))}/>
+            </div>
+            {asignacion&&<>
+              <div style={{flex:2,minWidth:140}}>
+                {i===0&&<div style={{fontSize:12,fontWeight:600,color:"#6b7280",marginBottom:4}}>Proveedor</div>}
+                <input style={{...fs,width:"100%"}} value={r.proveedor} onChange={e=>upd(i,"proveedor",e.target.value)} placeholder="Empresa proveedora..."/>
               </div>
-              <div style={{width:80}}>
-                {i===0&&<div style={{fontSize:12,fontWeight:600,color:"#6b7280",marginBottom:4}}>Cantidad</div>}
-                <input type="number" min={1} style={{...fs,width:"100%",textAlign:"center"}} value={r.cantidad} onChange={e=>update(i,"cantidad",Math.max(1,parseInt(e.target.value)||1))}/>
+              <div style={{flex:2,minWidth:130}}>
+                {i===0&&<div style={{fontSize:12,fontWeight:600,color:"#6b7280",marginBottom:4}}>Responsable</div>}
+                <input style={{...fs,width:"100%"}} value={r.responsable} onChange={e=>upd(i,"responsable",e.target.value)} placeholder="Nombre del operador..."/>
               </div>
-              {asignacion&&<>
-                <div style={{flex:2,minWidth:140}}>
-                  {i===0&&<div style={{fontSize:12,fontWeight:600,color:"#6b7280",marginBottom:4}}>Proveedor / Empresa</div>}
-                  <input style={{...fs,width:"100%"}} value={r.proveedor} onChange={e=>update(i,"proveedor",e.target.value)} placeholder="Empresa proveedora..."/>
-                </div>
-                <div style={{flex:2,minWidth:130}}>
-                  {i===0&&<div style={{fontSize:12,fontWeight:600,color:"#6b7280",marginBottom:4}}>Responsable / Operador</div>}
-                  <input style={{...fs,width:"100%"}} value={r.responsable} onChange={e=>update(i,"responsable",e.target.value)} placeholder="Nombre del operador..."/>
-                </div>
-              </>}
-              <div style={{paddingTop:i===0?20:0}}>
-                <button onClick={()=>remove(i)} disabled={recursos.length===1}
-                  style={{background:"#fef2f2",color:"#ef4444",border:"1px solid #fecaca",borderRadius:6,padding:"7px 10px",
-                    cursor:recursos.length===1?"not-allowed":"pointer",opacity:recursos.length===1?0.4:1,fontSize:14}}>✕</button>
-              </div>
+            </>}
+            <div style={{paddingTop:i===0?20:0}}>
+              <button onClick={()=>remove(i)} disabled={recursos.length===1}
+                style={{background:"#fef2f2",color:"#ef4444",border:"1px solid #fecaca",borderRadius:6,padding:"7px 10px",cursor:recursos.length===1?"not-allowed":"pointer",opacity:recursos.length===1?0.4:1,fontSize:14}}>✕</button>
             </div>
           </div>
-        ))}
-        <button onClick={add} style={{background:"#eff6ff",color:"#2563eb",border:"1px dashed #93c3fd",borderRadius:7,padding:"8px 16px",cursor:"pointer",fontSize:13,fontWeight:600,width:"100%"}}>+ Agregar recurso</button>
+        </div>
+      ))}
+      <button onClick={add} style={{background:"#eff6ff",color:"#2563eb",border:"1px dashed #93c3fd",borderRadius:7,padding:"8px 16px",cursor:"pointer",fontSize:13,fontWeight:600,width:"100%"}}>+ Agregar recurso</button>
+    </div>
+  );
+}
+
+// ── Sección colapsable ─────────────────────────────────────────────────────
+function Seccion({titulo,color="#1e3a5f",children}){
+  const [open,setOpen]=useState(true);
+  return(
+    <div style={{border:`1px solid #e5e7eb`,borderRadius:10,overflow:"hidden",marginBottom:4}}>
+      <div onClick={()=>setOpen(o=>!o)} style={{background:"#f8fafc",padding:"10px 16px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",userSelect:"none"}}>
+        <span style={{fontWeight:700,fontSize:14,color}}>{titulo}</span>
+        <span style={{fontSize:12,color:"#9ca3af"}}>{open?"▲":"▼"}</span>
       </div>
-    );
-  }
+      {open&&<div style={{padding:"16px"}}>{children}</div>}
+    </div>
+  );
+}
 
-  // ── App principal ──────────────────────────────────────────────────────────
-
-  function App(){
-    const [view,setView]           = useState("home");
-    const [reqs,setReqs]           = useState([]);
-    const [loading,setLoading]     = useState(true);
-    const [online,setOnline]       = useState(navigator.onLine);
-    const [pendingWrites,setPendingWrites] = useState(false);
-    const [search,setSearch]       = useState("");
-    const [filtroServicio,setFS]   = useState("");
-    const [filtroEstado,setFE]     = useState("");
-    const [asignando,setAsignando] = useState(null);
-    const [asignForm,setAsignForm] = useState({recursosAsignados:[emptyAsignado()],fechaProgramada:""});
-    const [newReq,setNewReq]       = useState({area:"",locacion:"",whatsapp:"",servicio:"",fechaRequerida:"",observaciones:"",prioridad:"Media",recursosSolicitados:[emptyRecurso()]});
-    const [submitted,setSubmitted] = useState(false);
-    const [lastId,setLastId]       = useState("");
-    const [errors,setErrors]       = useState({});
-
-    // Suscripción Firestore en tiempo real
-    useEffect(()=>{
-      const unsub = db.collection(COL)
-        .orderBy('_ts','asc')
-        .onSnapshot({includeMetadataChanges:true}, snap=>{
-          setReqs(snap.docs.map(d=>({...d.data(),_docId:d.id})));
-          setPendingWrites(snap.docs.some(d=>d.metadata.hasPendingWrites));
-          setLoading(false);
-        }, err=>{ console.error(err); setLoading(false); });
-      return unsub;
-    },[]);
-
-    // Detector de conexión
-    useEffect(()=>{
-      const on=()=>setOnline(true), off=()=>setOnline(false);
-      window.addEventListener('online',on);
-      window.addEventListener('offline',off);
-      return()=>{ window.removeEventListener('online',on); window.removeEventListener('offline',off); };
-    },[]);
-
-    const filtered = reqs.filter(r=>{
-      const q=search.toLowerCase();
-      return(!filtroServicio||r.servicio===filtroServicio)&&(!filtroEstado||r.estado===filtroEstado)&&
-        (!q||r.id.toLowerCase().includes(q)||r.area.toLowerCase().includes(q)||r.locacion.toLowerCase().includes(q));
-    });
-
-    const validate=()=>{
-      const e={};
-      if(!newReq.area.trim())e.area=true;
-      if(!newReq.locacion)e.locacion=true;
-      if(!newReq.servicio)e.servicio=true;
-      if(!newReq.fechaRequerida)e.fechaRequerida=true;
-      return e;
-    };
-
-    const submitReq=async()=>{
-      const e=validate();
-      if(Object.keys(e).length){setErrors(e);return;}
-      const num=String(reqs.length+1).padStart(3,'0');
-      const id=`REQ-${num}`;
-      await db.collection(COL).add({
-        ...newReq, id,
-        estado:"Pendiente",
-        fechaCreacion: new Date().toISOString().split("T")[0],
-        recursosAsignados:[],
-        fechaProgramada:"",
-        _ts: Date.now()
-      });
-      setLastId(id); setSubmitted(true);
-    };
-
-    const resetForm=()=>{ setNewReq({area:"",locacion:"",whatsapp:"",servicio:"",fechaRequerida:"",observaciones:"",prioridad:"Media",recursosSolicitados:[emptyRecurso()]}); setSubmitted(false); setErrors({}); };
-
-    const abrirAsignar=req=>{ setAsignando(req); setAsignForm({recursosAsignados:req.recursosAsignados.length?req.recursosAsignados.map(r=>({...r})):[emptyAsignado()],fechaProgramada:req.fechaProgramada}); };
-
-    const guardarAsignacion=async()=>{
-      await db.collection(COL).doc(asignando._docId).update({
-        recursosAsignados: asignForm.recursosAsignados,
-        fechaProgramada: asignForm.fechaProgramada,
-        estado: asignForm.recursosAsignados.some(ra=>ra.equipo) ? "En Proceso" : asignando.estado
-      });
-      setAsignando(null);
-    };
-
-    const completar = async req => await db.collection(COL).doc(req._docId).update({estado:"Completado"});
-    const cancelar  = async req => await db.collection(COL).doc(req._docId).update({estado:"Cancelado"});
-
-    const pendientes  = reqs.filter(r=>r.estado==="Pendiente").length;
-    const enProceso   = reqs.filter(r=>r.estado==="En Proceso").length;
-    const completados = reqs.filter(r=>r.estado==="Completado").length;
-    const maxSvc      = Math.max(...SERVICIOS.map(s=>reqs.filter(r=>r.servicio===s).length),1);
-
-    const fld = err=>({width:"100%",padding:"9px 12px",borderRadius:7,border:`1.5px solid ${err?"#ef4444":"#d1d5db"}`,fontSize:14,outline:"none",boxSizing:"border-box",background:"#fff"});
-    const lbl = {fontSize:13,fontWeight:600,color:"#374151",marginBottom:4,display:"block"};
-
-    const header=(title,sub)=>(
-      <div style={{background:"linear-gradient(90deg,#1e3a5f,#2563eb)",padding:"16px 28px",display:"flex",alignItems:"center",gap:16}}>
-        <button onClick={()=>{setView("home");resetForm();}} style={{background:"none",border:"none",color:"#93c5fd",cursor:"pointer",fontSize:22}}>←</button>
+// ── Campos específicos por servicio ───────────────────────────────────────
+function CamposCargaTerrestre({req,setReq,fld}){
+  const upd = (f,v)=>setReq(p=>({...p,[f]:v}));
+  const updOrigen  = (f,v)=>setReq(p=>({...p,contactoOrigen:{...p.contactoOrigen,[f]:v}}));
+  const updDestino = (f,v)=>setReq(p=>({...p,contactoDestino:{...p.contactoDestino,[f]:v}}));
+  const lbl={fontSize:13,fontWeight:600,color:"#374151",marginBottom:4,display:"block"};
+  return(
+    <Seccion titulo="🚛 Datos de Carga Terrestre" color="#2563eb">
+      <div style={{display:"grid",gap:14}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+          <div>
+            <label style={lbl}>Origen</label>
+            <input style={fld()} value={req.origen} onChange={e=>upd("origen",e.target.value)} placeholder="Lugar de origen..."/>
+          </div>
+          <div>
+            <label style={lbl}>Destino</label>
+            <input style={fld()} value={req.destino} onChange={e=>upd("destino",e.target.value)} placeholder="Lugar de destino..."/>
+          </div>
+        </div>
+        <div style={{background:"#f8fafc",borderRadius:8,padding:12,display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+          <div>
+            <label style={{...lbl,color:"#6b7280",fontSize:12}}>Contacto en Origen</label>
+            <input style={{...fld(),marginBottom:6}} value={req.contactoOrigen.nombre} onChange={e=>updOrigen("nombre",e.target.value)} placeholder="Nombre..."/>
+            <div style={{position:"relative"}}>
+              <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",fontSize:14}}>📱</span>
+              <input style={{...fld(),paddingLeft:30}} value={req.contactoOrigen.telefono} onChange={e=>updOrigen("telefono",e.target.value)} placeholder="Teléfono..." type="tel"/>
+            </div>
+          </div>
+          <div>
+            <label style={{...lbl,color:"#6b7280",fontSize:12}}>Contacto en Destino</label>
+            <input style={{...fld(),marginBottom:6}} value={req.contactoDestino.nombre} onChange={e=>updDestino("nombre",e.target.value)} placeholder="Nombre..."/>
+            <div style={{position:"relative"}}>
+              <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",fontSize:14}}>📱</span>
+              <input style={{...fld(),paddingLeft:30}} value={req.contactoDestino.telefono} onChange={e=>updDestino("telefono",e.target.value)} placeholder="Teléfono..." type="tel"/>
+            </div>
+          </div>
+        </div>
         <div>
-          <div style={{color:"#fff",fontWeight:700,fontSize:18}}>{title}</div>
-          <div style={{color:"#93c5fd",fontSize:12}}>{sub}</div>
+          <label style={lbl}>Peso y Dimensiones de la Carga</label>
+          <input style={fld()} value={req.pesoDimensionesCarga} onChange={e=>upd("pesoDimensionesCarga",e.target.value)} placeholder="Ej: 5T — 3m x 2m x 2m"/>
         </div>
       </div>
-    );
+    </Seccion>
+  );
+}
 
-    // Loading
-    if(loading) return(
-      <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"linear-gradient(135deg,#1e3a5f,#2563eb)",flexDirection:"column",gap:16}}>
-        <div style={{fontSize:52}}>🏗️</div>
-        <div style={{color:"#fff",fontSize:18,fontWeight:600}}>Cargando datos...</div>
-        <div style={{color:"#93c5fd",fontSize:13}}>{navigator.onLine?"Conectando con la base de datos...":"Sin conexión — cargando datos locales..."}</div>
+function CamposIzajes({req,setReq,fld}){
+  const upd = (f,v)=>setReq(p=>({...p,[f]:v}));
+  const lbl={fontSize:13,fontWeight:600,color:"#374151",marginBottom:4,display:"block"};
+  return(
+    <Seccion titulo="🏗️ Datos de Izaje" color="#7c3aed">
+      <div style={{display:"grid",gap:14}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+          <div>
+            <label style={lbl}>Peso del equipo a izar</label>
+            <input style={fld()} value={req.pesoEquipoIzar} onChange={e=>upd("pesoEquipoIzar",e.target.value)} placeholder="Ej: 12T"/>
+          </div>
+          <div>
+            <label style={lbl}>Dimensiones del equipo a izar</label>
+            <input style={fld()} value={req.dimensionesEquipoIzar} onChange={e=>upd("dimensionesEquipoIzar",e.target.value)} placeholder="Ej: 4m x 2m x 2m"/>
+          </div>
+        </div>
+        <div>
+          <label style={lbl}>Distancia aprox. de posicionamiento del equipo</label>
+          <input style={fld()} value={req.distanciaEquipo} onChange={e=>upd("distanciaEquipo",e.target.value)} placeholder="Ej: 8 metros desde la carga"/>
+        </div>
       </div>
-    );
+    </Seccion>
+  );
+}
 
-    // ── HOME ────────────────────────────────────────────────────────────────
-    if(view==="home") return(
-      <div style={{minHeight:"100vh",background:"linear-gradient(135deg,#1e3a5f 0%,#2563eb 100%)",display:"flex",flexDirection:"column",fontFamily:"system-ui,sans-serif"}}>
-        <StatusBar online={online} pendingWrites={pendingWrites}/>
-        <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center"}}>
-          <div style={{textAlign:"center",color:"#fff",padding:32}}>
-            <div style={{fontSize:48,marginBottom:8}}>🏗️</div>
-            <h1 style={{fontSize:30,fontWeight:800}}>Sistema de Requerimientos Logísticos</h1>
-            <p style={{color:"#93c5fd",marginTop:8,fontSize:15}}>Izajes · Carga Terrestre · Mantenimiento de Caminos · Cargas Líquidas</p>
-            <div style={{display:"flex",gap:16,justifyContent:"center",marginTop:36,flexWrap:"wrap"}}>
-              <button onClick={()=>setView("solicitante")} style={{background:"#fff",color:"#1e3a5f",border:"none",borderRadius:10,padding:"18px 36px",fontWeight:700,fontSize:16,cursor:"pointer",boxShadow:"0 4px 20px #0004"}}>
-                📝 Ingresar Requerimiento
-                <div style={{fontSize:12,fontWeight:400,color:"#6b7280",marginTop:4}}>Soy solicitante</div>
-              </button>
-              <button onClick={()=>setView("logistica")} style={{background:"#1e40af",color:"#fff",border:"2px solid #93c5fd",borderRadius:10,padding:"18px 36px",fontWeight:700,fontSize:16,cursor:"pointer",boxShadow:"0 4px 20px #0004"}}>
-                📊 Programación Logística
-                <div style={{fontSize:12,fontWeight:400,color:"#93c5fd",marginTop:4}}>Equipo interno</div>
-              </button>
-            </div>
+// ── App ────────────────────────────────────────────────────────────────────
+function App(){
+  const [view,setView]         = useState("home");
+  const [reqs,setReqs]         = useState([]);
+  const [loading,setLoading]   = useState(true);
+  const [online,setOnline]     = useState(navigator.onLine);
+  const [pending,setPending]   = useState(false);
+  const [search,setSearch]     = useState("");
+  const [filtroS,setFiltroS]   = useState("");
+  const [filtroE,setFiltroE]   = useState("");
+  const [asignando,setAsignando] = useState(null);
+  const [asignForm,setAsignForm] = useState({recursosAsignados:[emptyAsignado()],fechaProgramada:""});
+  const [newReq,setNewReq]     = useState(emptyReq());
+  const [submitted,setSubmitted] = useState(false);
+  const [lastId,setLastId]     = useState("");
+  const [idManual,setIdManual] = useState("");
+  const [errors,setErrors]     = useState({});
+
+  useEffect(()=>{
+    const unsub = db.collection(COL).orderBy('_ts','asc')
+      .onSnapshot({includeMetadataChanges:true}, snap=>{
+        setReqs(snap.docs.map(d=>({...d.data(),_docId:d.id})));
+        setPending(snap.docs.some(d=>d.metadata.hasPendingWrites));
+        setLoading(false);
+      }, ()=>setLoading(false));
+    return unsub;
+  },[]);
+
+  useEffect(()=>{
+    const on=()=>setOnline(true), off=()=>setOnline(false);
+    window.addEventListener('online',on); window.addEventListener('offline',off);
+    return()=>{ window.removeEventListener('online',on); window.removeEventListener('offline',off); };
+  },[]);
+
+  // Resetear recursos al cambiar servicio
+  const handleServicio = v => setNewReq(p=>({...p,servicio:v,recursosSolicitados:[emptyRecurso()]}));
+
+  const filtered = reqs.filter(r=>{
+    const q=search.toLowerCase();
+    return(!filtroS||r.servicio===filtroS)&&(!filtroE||r.estado===filtroE)&&
+      (!q||r.id?.toLowerCase().includes(q)||r.area?.toLowerCase().includes(q)||r.locacion?.toLowerCase().includes(q));
+  });
+
+  const validate=()=>{
+    const e={};
+    if(!newReq.area.trim())e.area=true;
+    if(!newReq.locacion)e.locacion=true;
+    if(!newReq.servicio)e.servicio=true;
+    if(!newReq.fechaRequerida)e.fechaRequerida=true;
+    return e;
+  };
+
+  const submitReq=async()=>{
+    const e=validate();
+    if(!idManual.trim()) e.id=true;
+    if(Object.keys(e).length){setErrors(e);return;}
+    const id=idManual.trim();
+    await db.collection(COL).add({...newReq,id,estado:"Pendiente",fechaCreacion:new Date().toISOString().split("T")[0],recursosAsignados:[],fechaProgramada:"",_ts:Date.now()});
+    setLastId(id); setSubmitted(true);
+  };
+
+  const resetForm=()=>{ setNewReq(emptyReq()); setIdManual(""); setSubmitted(false); setErrors({}); };
+
+  const abrirAsignar=req=>{
+    setAsignando(req);
+    setAsignForm({recursosAsignados:req.recursosAsignados?.length?req.recursosAsignados.map(r=>({...r})):[emptyAsignado()],fechaProgramada:req.fechaProgramada||""});
+  };
+
+  const guardarAsignacion=async()=>{
+    await db.collection(COL).doc(asignando._docId).update({
+      recursosAsignados:asignForm.recursosAsignados,
+      fechaProgramada:asignForm.fechaProgramada,
+      estado:asignForm.recursosAsignados.some(ra=>ra.equipo)?"En Proceso":asignando.estado
+    });
+    setAsignando(null);
+  };
+
+  const completar=async r=>await db.collection(COL).doc(r._docId).update({estado:"Completado"});
+  const cancelar =async r=>await db.collection(COL).doc(r._docId).update({estado:"Cancelado"});
+
+  const pendientes =reqs.filter(r=>r.estado==="Pendiente").length;
+  const enProceso  =reqs.filter(r=>r.estado==="En Proceso").length;
+  const completados=reqs.filter(r=>r.estado==="Completado").length;
+  const maxSvc     =Math.max(...SERVICIOS.map(s=>reqs.filter(r=>r.servicio===s).length),1);
+
+  const fld=(err)=>({width:"100%",padding:"9px 12px",borderRadius:7,border:`1.5px solid ${err?"#ef4444":"#d1d5db"}`,fontSize:14,outline:"none",boxSizing:"border-box",background:"#fff"});
+  const lbl={fontSize:13,fontWeight:600,color:"#374151",marginBottom:4,display:"block"};
+
+  const navHeader=(title,sub)=>(
+    <div style={{background:"linear-gradient(90deg,#1e3a5f,#2563eb)",padding:"16px 28px",display:"flex",alignItems:"center",gap:16}}>
+      <button onClick={()=>{setView("home");resetForm();}} style={{background:"none",border:"none",color:"#93c5fd",cursor:"pointer",fontSize:22}}>←</button>
+      <div>
+        <div style={{color:"#fff",fontWeight:700,fontSize:18}}>{title}</div>
+        <div style={{color:"#93c5fd",fontSize:12}}>{sub}</div>
+      </div>
+    </div>
+  );
+
+  if(loading) return(
+    <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"linear-gradient(135deg,#1e3a5f,#2563eb)",flexDirection:"column",gap:16}}>
+      <div style={{fontSize:52}}>🏗️</div>
+      <div style={{color:"#fff",fontSize:18,fontWeight:600}}>Cargando datos...</div>
+      <div style={{color:"#93c5fd",fontSize:13}}>{navigator.onLine?"Conectando con la base de datos...":"Sin conexión — cargando datos locales..."}</div>
+    </div>
+  );
+
+  // ── HOME ──────────────────────────────────────────────────────────────────
+  if(view==="home") return(
+    <div style={{minHeight:"100vh",background:"linear-gradient(135deg,#1e3a5f 0%,#2563eb 100%)",display:"flex",flexDirection:"column"}}>
+      <StatusBar online={online} pendingWrites={pending}/>
+      <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center"}}>
+        <div style={{textAlign:"center",color:"#fff",padding:32}}>
+          <div style={{fontSize:48,marginBottom:8}}>🏗️</div>
+          <h1 style={{fontSize:30,fontWeight:800}}>Sistema de Requerimientos Logísticos</h1>
+          <p style={{color:"#93c5fd",marginTop:8,fontSize:15}}>Izajes · Carga Terrestre · Mantenimiento de Caminos · Cargas Líquidas</p>
+          <div style={{display:"flex",gap:16,justifyContent:"center",marginTop:36,flexWrap:"wrap"}}>
+            <button onClick={()=>setView("solicitante")} style={{background:"#fff",color:"#1e3a5f",border:"none",borderRadius:10,padding:"18px 36px",fontWeight:700,fontSize:16,cursor:"pointer",boxShadow:"0 4px 20px #0004"}}>
+              📝 Ingresar Requerimiento
+              <div style={{fontSize:12,fontWeight:400,color:"#6b7280",marginTop:4}}>Soy solicitante</div>
+            </button>
+            <button onClick={()=>setView("logistica")} style={{background:"#1e40af",color:"#fff",border:"2px solid #93c5fd",borderRadius:10,padding:"18px 36px",fontWeight:700,fontSize:16,cursor:"pointer",boxShadow:"0 4px 20px #0004"}}>
+              📊 Programación Logística
+              <div style={{fontSize:12,fontWeight:400,color:"#93c5fd",marginTop:4}}>Equipo interno</div>
+            </button>
           </div>
         </div>
       </div>
-    );
+    </div>
+  );
 
-    // ── SOLICITANTE ──────────────────────────────────────────────────────────
-    if(view==="solicitante") return(
-      <div style={{minHeight:"100vh",background:"#f8fafc",fontFamily:"system-ui,sans-serif"}}>
-        <StatusBar online={online} pendingWrites={pendingWrites}/>
-        {header("📝 Nuevo Requerimiento","Completá los datos de tu solicitud")}
-        <div style={{maxWidth:660,margin:"36px auto",padding:"0 16px"}}>
-          {submitted?(
-            <div style={{background:"#fff",borderRadius:14,padding:40,textAlign:"center",boxShadow:"0 2px 16px #0001"}}>
-              <div style={{fontSize:56}}>✅</div>
-              <h2 style={{color:"#10b981",margin:"12px 0 6px"}}>¡Requerimiento enviado!</h2>
-              <p style={{color:"#6b7280"}}>Tu solicitud fue registrada y será gestionada por Programación Logística.</p>
-              <div style={{background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:8,padding:14,margin:"16px 0",fontSize:14,color:"#166534"}}>
-                ID asignado: <strong>{lastId}</strong>
-              </div>
-              {!online&&<div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:8,padding:12,marginBottom:16,fontSize:13,color:"#92400e"}}>
-                ⚠️ Sin conexión — el requerimiento se guardó en este dispositivo y se enviará automáticamente al recuperar señal.
-              </div>}
-              <button onClick={resetForm} style={{background:"#2563eb",color:"#fff",border:"none",borderRadius:8,padding:"12px 28px",fontWeight:600,cursor:"pointer",fontSize:15}}>Cargar otro requerimiento</button>
+  // ── SOLICITANTE ───────────────────────────────────────────────────────────
+  if(view==="solicitante") return(
+    <div style={{minHeight:"100vh",background:"#f8fafc"}}>
+      <StatusBar online={online} pendingWrites={pending}/>
+      {navHeader("📝 Nuevo Requerimiento","Completá los datos de tu solicitud")}
+      <div style={{maxWidth:700,margin:"32px auto",padding:"0 16px 40px"}}>
+        {submitted?(
+          <div style={{background:"#fff",borderRadius:14,padding:40,textAlign:"center",boxShadow:"0 2px 16px #0001"}}>
+            <div style={{fontSize:56}}>✅</div>
+            <h2 style={{color:"#10b981",margin:"12px 0 6px"}}>¡Requerimiento enviado!</h2>
+            <p style={{color:"#6b7280"}}>Tu solicitud fue registrada y será gestionada por Programación Logística.</p>
+            <div style={{background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:8,padding:14,margin:"16px 0",fontSize:14,color:"#166534"}}>
+              ID asignado: <strong>{lastId}</strong>
             </div>
-          ):(
-            <div style={{background:"#fff",borderRadius:14,padding:32,boxShadow:"0 2px 16px #0001"}}>
-              <h2 style={{margin:"0 0 24px",color:"#1e3a5f",fontSize:20}}>Datos del Requerimiento</h2>
-              <div style={{display:"grid",gap:18}}>
-                <div>
-                  <label style={lbl}>Área Solicitante *</label>
-                  <input style={fld(errors.area)} value={newReq.area} onChange={e=>{setNewReq(p=>({...p,area:e.target.value}));setErrors(p=>({...p,area:false}));}} placeholder="Ej: Mantenimiento, Operaciones, SSMA..."/>
-                  {errors.area&&<span style={{color:"#ef4444",fontSize:12}}>Este campo es requerido</span>}
-                </div>
-                <div>
-                  <label style={lbl}>Locación *</label>
-                  <select style={fld(errors.locacion)} value={newReq.locacion} onChange={e=>{setNewReq(p=>({...p,locacion:e.target.value}));setErrors(p=>({...p,locacion:false}));}}>
-                    <option value="">Seleccioná la locación...</option>
-                    {LOCACIONES.map(l=><option key={l} value={l}>📍 {l}</option>)}
-                  </select>
-                  {errors.locacion&&<span style={{color:"#ef4444",fontSize:12}}>Seleccioná una locación</span>}
-                </div>
-                <div>
-                  <label style={lbl}>WhatsApp de Contacto</label>
-                  <div style={{position:"relative"}}>
-                    <span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",fontSize:16}}>📱</span>
-                    <input style={{...fld(false),paddingLeft:36}} value={newReq.whatsapp} onChange={e=>setNewReq(p=>({...p,whatsapp:e.target.value}))} placeholder="Ej: 2994001234" type="tel"/>
+            {!online&&<div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:8,padding:12,marginBottom:16,fontSize:13,color:"#92400e"}}>
+              ⚠️ Sin conexión — el requerimiento se guardó localmente y se enviará al recuperar señal.
+            </div>}
+            <button onClick={resetForm} style={{background:"#2563eb",color:"#fff",border:"none",borderRadius:8,padding:"12px 28px",fontWeight:600,cursor:"pointer",fontSize:15}}>Cargar otro requerimiento</button>
+          </div>
+        ):(
+          <div style={{background:"#fff",borderRadius:14,padding:32,boxShadow:"0 2px 16px #0001",display:"grid",gap:20}}>
+            <h2 style={{margin:0,color:"#1e3a5f",fontSize:20}}>Datos del Requerimiento</h2>
+
+            {/* ── Datos básicos ── */}
+            <Seccion titulo="📋 Datos Generales">
+              <div style={{display:"grid",gap:14}}>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 2fr",gap:12}}>
+                  <div>
+                    <label style={lbl}>ID / N° de Solicitud *</label>
+                    <input style={fld(errors.id)} value={idManual} onChange={e=>{setIdManual(e.target.value);setErrors(p=>({...p,id:false}));}} placeholder="Ej: SOL-001, OT-2345..."/>
+                    {errors.id&&<span style={{color:"#ef4444",fontSize:12}}>Campo requerido</span>}
                   </div>
-                  <span style={{fontSize:11,color:"#9ca3af"}}>Para consultas sobre el requerimiento</span>
+                  <div>
+                    <label style={lbl}>Área Solicitante *</label>
+                    <input style={fld(errors.area)} value={newReq.area} onChange={e=>{setNewReq(p=>({...p,area:e.target.value}));setErrors(p=>({...p,area:false}));}} placeholder="Ej: Mantenimiento, Operaciones, SSMA..."/>
+                    {errors.area&&<span style={{color:"#ef4444",fontSize:12}}>Campo requerido</span>}
+                  </div>
                 </div>
-                <div>
-                  <label style={lbl}>Tipo de Servicio *</label>
-                  <select style={fld(errors.servicio)} value={newReq.servicio} onChange={e=>{setNewReq(p=>({...p,servicio:e.target.value}));setErrors(p=>({...p,servicio:false}));}}>
-                    <option value="">Seleccioná un servicio...</option>
-                    {SERVICIOS.map(s=><option key={s} value={s}>{servicioIcon[s]} {s}</option>)}
-                  </select>
-                  {errors.servicio&&<span style={{color:"#ef4444",fontSize:12}}>Seleccioná un tipo de servicio</span>}
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                  <div>
+                    <label style={lbl}>Locación *</label>
+                    <select style={fld(errors.locacion)} value={newReq.locacion} onChange={e=>{setNewReq(p=>({...p,locacion:e.target.value}));setErrors(p=>({...p,locacion:false}));}}>
+                      <option value="">Seleccioná...</option>
+                      {LOCACIONES.map(l=><option key={l} value={l}>📍 {l}</option>)}
+                    </select>
+                    {errors.locacion&&<span style={{color:"#ef4444",fontSize:12}}>Campo requerido</span>}
+                  </div>
+                  <div>
+                    <label style={lbl}>Prioridad</label>
+                    <select style={fld()} value={newReq.prioridad} onChange={e=>setNewReq(p=>({...p,prioridad:e.target.value}))}>
+                      {PRIORIDADES.map(p=><option key={p} value={p}>{p}</option>)}
+                    </select>
+                  </div>
                 </div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                  <div>
+                    <label style={lbl}>Tipo de Servicio *</label>
+                    <select style={fld(errors.servicio)} value={newReq.servicio} onChange={e=>{handleServicio(e.target.value);setErrors(p=>({...p,servicio:false}));}}>
+                      <option value="">Seleccioná...</option>
+                      {SERVICIOS.map(s=><option key={s} value={s}>{servicioIcon[s]} {s}</option>)}
+                    </select>
+                    {errors.servicio&&<span style={{color:"#ef4444",fontSize:12}}>Campo requerido</span>}
+                  </div>
                   <div>
                     <label style={lbl}>Fecha Requerida *</label>
                     <input type="date" style={fld(errors.fechaRequerida)} value={newReq.fechaRequerida} onChange={e=>{setNewReq(p=>({...p,fechaRequerida:e.target.value}));setErrors(p=>({...p,fechaRequerida:false}));}}/>
                     {errors.fechaRequerida&&<span style={{color:"#ef4444",fontSize:12}}>Campo requerido</span>}
                   </div>
-                  <div>
-                    <label style={lbl}>Prioridad</label>
-                    <select style={fld(false)} value={newReq.prioridad} onChange={e=>setNewReq(p=>({...p,prioridad:e.target.value}))}>
-                      {PRIORIDADES.map(p=><option key={p} value={p}>{p}</option>)}
-                    </select>
-                  </div>
                 </div>
-                <div>
-                  <label style={{...lbl,fontSize:14,color:"#1e3a5f"}}>🔧 Recursos Solicitados</label>
-                  <RecursosEditor recursos={newReq.recursosSolicitados} onChange={v=>setNewReq(p=>({...p,recursosSolicitados:v}))} asignacion={false}/>
-                </div>
-                <div>
-                  <label style={lbl}>Observaciones / Descripción</label>
-                  <textarea style={{...fld(false),height:80,resize:"vertical"}} value={newReq.observaciones} onChange={e=>setNewReq(p=>({...p,observaciones:e.target.value}))} placeholder="Descripción adicional..."/>
-                </div>
-                <button onClick={submitReq} style={{background:"#2563eb",color:"#fff",border:"none",borderRadius:9,padding:13,fontWeight:700,fontSize:15,cursor:"pointer"}}>Enviar Requerimiento →</button>
               </div>
+            </Seccion>
+
+            {/* ── Campos específicos por servicio ── */}
+            {newReq.servicio==="Carga Terrestre"&&<CamposCargaTerrestre req={newReq} setReq={setNewReq} fld={fld}/>}
+            {newReq.servicio==="Izajes"&&<CamposIzajes req={newReq} setReq={setNewReq} fld={fld}/>}
+
+            {/* ── Recursos ── */}
+            {newReq.servicio&&(
+              <Seccion titulo="🔧 Recursos Solicitados">
+                <RecursosEditor recursos={newReq.recursosSolicitados} onChange={v=>setNewReq(p=>({...p,recursosSolicitados:v}))} servicio={newReq.servicio} asignacion={false}/>
+              </Seccion>
+            )}
+
+            {/* ── Contactos ── */}
+            <Seccion titulo="👤 Personas de Contacto">
+              <PersonasEditor personas={newReq.contactos} onChange={v=>setNewReq(p=>({...p,contactos:v}))} titulo="contacto" placeholder="Nombre del contacto"/>
+            </Seccion>
+
+            {/* ── Permiso de trabajo ── */}
+            <Seccion titulo="📄 Responsables del Permiso de Trabajo">
+              <PersonasEditor personas={newReq.responsablesPermiso} onChange={v=>setNewReq(p=>({...p,responsablesPermiso:v}))} titulo="responsable" placeholder="Nombre del responsable"/>
+            </Seccion>
+
+            {/* ── Imputación de costo ── */}
+            <Seccion titulo="💰 Imputación del Costo">
+              <input style={fld()} value={newReq.imputacionCosto} onChange={e=>setNewReq(p=>({...p,imputacionCosto:e.target.value}))} placeholder="Ej: CC-1234 / Proyecto Norte / OT-5678..."/>
+            </Seccion>
+
+            {/* ── Observaciones ── */}
+            <div>
+              <label style={lbl}>Observaciones / Descripción adicional</label>
+              <textarea style={{...fld(),height:80,resize:"vertical"}} value={newReq.observaciones} onChange={e=>setNewReq(p=>({...p,observaciones:e.target.value}))} placeholder="Cualquier información adicional relevante..."/>
             </div>
-          )}
-        </div>
-      </div>
-    );
 
-    // ── LOGÍSTICA ────────────────────────────────────────────────────────────
-    return(
-      <div style={{minHeight:"100vh",background:"#f1f5f9",fontFamily:"system-ui,sans-serif"}}>
-        <StatusBar online={online} pendingWrites={pendingWrites}/>
-        {header("📊 Programación Logística","Gestión y asignación de requerimientos")}
-
-        <div style={{maxWidth:1200,margin:"0 auto",padding:"24px 16px"}}>
-          <div style={{display:"flex",gap:12,flexWrap:"wrap",marginBottom:20}}>
-            <StatCard label="Total"      value={reqs.length} color="#2563eb" icon="📋"/>
-            <StatCard label="Pendientes" value={pendientes}  color="#f59e0b" icon="⏳"/>
-            <StatCard label="En Proceso" value={enProceso}   color="#3b82f6" icon="⚙️"/>
-            <StatCard label="Completados"value={completados} color="#10b981" icon="✅"/>
-          </div>
-
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:20}}>
-            <div style={{background:"#fff",borderRadius:10,padding:20,border:"1px solid #e5e7eb"}}>
-              <div style={{fontWeight:700,color:"#1e3a5f",marginBottom:14}}>Por Tipo de Servicio</div>
-              {SERVICIOS.map(s=><MiniBar key={s} label={`${servicioIcon[s]} ${s}`} value={reqs.filter(r=>r.servicio===s).length} max={maxSvc} color="#2563eb"/>)}
-            </div>
-            <div style={{background:"#fff",borderRadius:10,padding:20,border:"1px solid #e5e7eb"}}>
-              <div style={{fontWeight:700,color:"#1e3a5f",marginBottom:14}}>Por Estado</div>
-              {ESTADOS.map(s=><MiniBar key={s} label={s} value={reqs.filter(r=>r.estado===s).length} max={reqs.length} color={estadoColor[s]}/>)}
-            </div>
-          </div>
-
-          <div style={{background:"#fff",borderRadius:10,padding:16,border:"1px solid #e5e7eb",marginBottom:16,display:"flex",gap:12,flexWrap:"wrap",alignItems:"center"}}>
-            <input style={{flex:1,minWidth:180,padding:"8px 12px",borderRadius:7,border:"1.5px solid #d1d5db",fontSize:14,outline:"none"}} placeholder="🔍 Buscar por ID, área o locación..." value={search} onChange={e=>setSearch(e.target.value)}/>
-            <select style={{padding:"8px 12px",borderRadius:7,border:"1.5px solid #d1d5db",fontSize:14}} value={filtroServicio} onChange={e=>setFS(e.target.value)}>
-              <option value="">Todos los servicios</option>
-              {SERVICIOS.map(s=><option key={s} value={s}>{s}</option>)}
-            </select>
-            <select style={{padding:"8px 12px",borderRadius:7,border:"1.5px solid #d1d5db",fontSize:14}} value={filtroEstado} onChange={e=>setFE(e.target.value)}>
-              <option value="">Todos los estados</option>
-              {ESTADOS.map(s=><option key={s} value={s}>{s}</option>)}
-            </select>
-          </div>
-
-          <div style={{background:"#fff",borderRadius:10,border:"1px solid #e5e7eb",overflow:"hidden"}}>
-            <div style={{overflowX:"auto"}}>
-              <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
-                <thead>
-                  <tr style={{background:"#f8fafc",borderBottom:"2px solid #e5e7eb"}}>
-                    {["ID","Fecha","Área","Locación","Servicio","Fecha Req.","Prioridad","Estado","Rec. Solicitados","Rec. Asignados","WhatsApp","Acciones"].map(h=>(
-                      <th key={h} style={{padding:"12px 14px",textAlign:"left",fontWeight:700,color:"#374151",whiteSpace:"nowrap"}}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.length===0&&<tr><td colSpan={12} style={{padding:32,textAlign:"center",color:"#9ca3af"}}>No hay requerimientos</td></tr>}
-                  {filtered.map((r,i)=>(
-                    <tr key={r._docId||i} style={{borderBottom:"1px solid #f3f4f6",background:i%2===0?"#fff":"#fafafa"}}>
-                      <td style={{padding:"11px 14px",whiteSpace:"nowrap"}}>
-                        <span style={{fontWeight:700,color:"#2563eb"}}>{r.id}</span>
-                        {r._pendingWrite&&<span title="Pendiente de sincronización" style={{marginLeft:4,fontSize:10,color:"#f59e0b"}}>⏳</span>}
-                      </td>
-                      <td style={{padding:"11px 14px",color:"#6b7280",whiteSpace:"nowrap"}}>{r.fechaCreacion}</td>
-                      <td style={{padding:"11px 14px",maxWidth:130,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.area}</td>
-                      <td style={{padding:"11px 14px",whiteSpace:"nowrap"}}><Badge color="#6366f1" text={`📍 ${r.locacion}`}/></td>
-                      <td style={{padding:"11px 14px",whiteSpace:"nowrap"}}><Badge color="#2563eb" text={`${servicioIcon[r.servicio]} ${r.servicio}`}/></td>
-                      <td style={{padding:"11px 14px",whiteSpace:"nowrap"}}>{r.fechaRequerida}</td>
-                      <td style={{padding:"11px 14px"}}><Badge color={prioridadColor[r.prioridad]} text={r.prioridad}/></td>
-                      <td style={{padding:"11px 14px"}}><Badge color={estadoColor[r.estado]} text={r.estado}/></td>
-                      <td style={{padding:"11px 14px",maxWidth:180,fontSize:12}}>
-                        {(r.recursosSolicitados||[]).map((rs,idx)=>(
-                          <div key={idx} style={{whiteSpace:"nowrap"}}>🔸 {rs.equipo==="__custom__"?rs.custom:rs.equipo} <strong>×{rs.cantidad}</strong></div>
-                        ))}
-                      </td>
-                      <td style={{padding:"11px 14px",maxWidth:180,fontSize:12}}>
-                        {!(r.recursosAsignados||[]).length
-                          ?<span style={{color:"#d1d5db"}}>Sin asignar</span>
-                          :(r.recursosAsignados||[]).map((ra,idx)=>(
-                            <div key={idx} style={{whiteSpace:"nowrap",color:"#10b981"}}>✅ {ra.equipo==="__custom__"?ra.custom:ra.equipo} <strong>×{ra.cantidad}</strong></div>
-                          ))}
-                      </td>
-                      <td style={{padding:"11px 14px",whiteSpace:"nowrap"}}>
-                        {r.whatsapp?<a href={`https://wa.me/549${r.whatsapp}`} target="_blank" rel="noreferrer" style={{color:"#25d366",fontWeight:600,textDecoration:"none",fontSize:13}}>📱 {r.whatsapp}</a>:<span style={{color:"#d1d5db"}}>—</span>}
-                      </td>
-                      <td style={{padding:"11px 14px",whiteSpace:"nowrap"}}>
-                        <div style={{display:"flex",gap:6}}>
-                          {r.estado!=="Completado"&&r.estado!=="Cancelado"&&(
-                            <button onClick={()=>abrirAsignar(r)} style={{background:"#eff6ff",color:"#2563eb",border:"1px solid #bfdbfe",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontSize:12,fontWeight:600}}>{r.estado==="Pendiente"?"Asignar":"Editar"}</button>
-                          )}
-                          {r.estado==="En Proceso"&&<button onClick={()=>completar(r)} style={{background:"#f0fdf4",color:"#10b981",border:"1px solid #bbf7d0",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontSize:12,fontWeight:600}}>✓</button>}
-                          {r.estado==="Pendiente"&&<button onClick={()=>cancelar(r)} style={{background:"#fef2f2",color:"#ef4444",border:"1px solid #fecaca",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontSize:12,fontWeight:600}}>✕</button>}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-
-        {asignando&&(
-          <div style={{position:"fixed",inset:0,background:"#0007",display:"flex",alignItems:"center",justifyContent:"center",zIndex:100,padding:16}}>
-            <div style={{background:"#fff",borderRadius:14,padding:28,width:740,maxWidth:"100%",maxHeight:"90vh",overflowY:"auto",boxShadow:"0 20px 60px #0003"}}>
-              <h3 style={{margin:"0 0 4px",color:"#1e3a5f"}}>Asignar Requerimiento</h3>
-              <div style={{color:"#6b7280",fontSize:13,marginBottom:8}}>{asignando.id} · {servicioIcon[asignando.servicio]} {asignando.servicio}</div>
-              <div style={{background:"#f8fafc",borderRadius:8,padding:"10px 14px",marginBottom:18,fontSize:13,display:"flex",flexWrap:"wrap",gap:12}}>
-                <span><span style={{color:"#6b7280"}}>Área:</span> <strong>{asignando.area}</strong></span>
-                <span><span style={{color:"#6b7280"}}>📍</span> <strong>{asignando.locacion}</strong></span>
-                {asignando.whatsapp&&<a href={`https://wa.me/549${asignando.whatsapp}`} target="_blank" rel="noreferrer" style={{color:"#25d366",fontWeight:600,textDecoration:"none"}}>📱 {asignando.whatsapp}</a>}
-              </div>
-              <div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:8,padding:"12px 16px",marginBottom:18}}>
-                <div style={{fontSize:13,fontWeight:700,color:"#92400e",marginBottom:8}}>📋 Recursos Solicitados</div>
-                {(asignando.recursosSolicitados||[]).map((rs,i)=>(
-                  <div key={i} style={{fontSize:13,color:"#78350f",marginBottom:4}}>🔸 <strong>{rs.equipo==="__custom__"?rs.custom:rs.equipo}</strong> — Cantidad: <strong>{rs.cantidad}</strong></div>
-                ))}
-              </div>
-              <div style={{fontWeight:700,color:"#1e3a5f",fontSize:14,marginBottom:10}}>⚙️ Recursos a Asignar</div>
-              <RecursosEditor recursos={asignForm.recursosAsignados} onChange={v=>setAsignForm(p=>({...p,recursosAsignados:v}))} asignacion={true}/>
-              <div style={{marginTop:16}}>
-                <label style={{fontSize:13,fontWeight:600,color:"#374151",marginBottom:4,display:"block"}}>Fecha y Hora Programada</label>
-                <input type="datetime-local" style={{padding:"9px 12px",borderRadius:7,border:"1.5px solid #d1d5db",fontSize:14,outline:"none",background:"#fff"}} value={asignForm.fechaProgramada} onChange={e=>setAsignForm(p=>({...p,fechaProgramada:e.target.value}))}/>
-              </div>
-              <div style={{display:"flex",gap:10,marginTop:20}}>
-                <button onClick={()=>setAsignando(null)} style={{flex:1,background:"#f3f4f6",color:"#374151",border:"none",borderRadius:8,padding:11,fontWeight:600,cursor:"pointer"}}>Cancelar</button>
-                <button onClick={guardarAsignacion} style={{flex:2,background:"#2563eb",color:"#fff",border:"none",borderRadius:8,padding:11,fontWeight:700,cursor:"pointer"}}>Guardar Asignación</button>
-              </div>
-            </div>
+            <button onClick={submitReq} style={{background:"#2563eb",color:"#fff",border:"none",borderRadius:9,padding:14,fontWeight:700,fontSize:15,cursor:"pointer"}}>
+              Enviar Requerimiento →
+            </button>
           </div>
         )}
       </div>
-    );
-  }
+    </div>
+  );
 
-  ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+  // ── LOGÍSTICA ─────────────────────────────────────────────────────────────
+  return(
+    <div style={{minHeight:"100vh",background:"#f1f5f9"}}>
+      <StatusBar online={online} pendingWrites={pending}/>
+      {navHeader("📊 Programación Logística","Gestión y asignación de requerimientos")}
+
+      <div style={{maxWidth:1300,margin:"0 auto",padding:"24px 16px"}}>
+        {/* Stats */}
+        <div style={{display:"flex",gap:12,flexWrap:"wrap",marginBottom:20}}>
+          <StatCard label="Total"      value={reqs.length} color="#2563eb" icon="📋"/>
+          <StatCard label="Pendientes" value={pendientes}  color="#f59e0b" icon="⏳"/>
+          <StatCard label="En Proceso" value={enProceso}   color="#3b82f6" icon="⚙️"/>
+          <StatCard label="Completados"value={completados} color="#10b981" icon="✅"/>
+        </div>
+
+        {/* Charts */}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:20}}>
+          <div style={{background:"#fff",borderRadius:10,padding:20,border:"1px solid #e5e7eb"}}>
+            <div style={{fontWeight:700,color:"#1e3a5f",marginBottom:14}}>Por Tipo de Servicio</div>
+            {SERVICIOS.map(s=><MiniBar key={s} label={`${servicioIcon[s]} ${s}`} value={reqs.filter(r=>r.servicio===s).length} max={maxSvc} color="#2563eb"/>)}
+          </div>
+          <div style={{background:"#fff",borderRadius:10,padding:20,border:"1px solid #e5e7eb"}}>
+            <div style={{fontWeight:700,color:"#1e3a5f",marginBottom:14}}>Por Estado</div>
+            {ESTADOS.map(s=><MiniBar key={s} label={s} value={reqs.filter(r=>r.estado===s).length} max={reqs.length} color={estadoColor[s]}/>)}
+          </div>
+        </div>
+
+        {/* Filtros */}
+        <div style={{background:"#fff",borderRadius:10,padding:16,border:"1px solid #e5e7eb",marginBottom:16,display:"flex",gap:12,flexWrap:"wrap",alignItems:"center"}}>
+          <input style={{flex:1,minWidth:180,padding:"8px 12px",borderRadius:7,border:"1.5px solid #d1d5db",fontSize:14,outline:"none"}} placeholder="🔍 Buscar por ID, área o locación..." value={search} onChange={e=>setSearch(e.target.value)}/>
+          <select style={{padding:"8px 12px",borderRadius:7,border:"1.5px solid #d1d5db",fontSize:14}} value={filtroS} onChange={e=>setFiltroS(e.target.value)}>
+            <option value="">Todos los servicios</option>
+            {SERVICIOS.map(s=><option key={s} value={s}>{s}</option>)}
+          </select>
+          <select style={{padding:"8px 12px",borderRadius:7,border:"1.5px solid #d1d5db",fontSize:14}} value={filtroE} onChange={e=>setFiltroE(e.target.value)}>
+            <option value="">Todos los estados</option>
+            {ESTADOS.map(s=><option key={s} value={s}>{s}</option>)}
+          </select>
+        </div>
+
+        {/* Tabla */}
+        <div style={{background:"#fff",borderRadius:10,border:"1px solid #e5e7eb",overflow:"hidden"}}>
+          <div style={{overflowX:"auto"}}>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+              <thead>
+                <tr style={{background:"#f8fafc",borderBottom:"2px solid #e5e7eb"}}>
+                  {["ID","Fecha","Área","Locación","Servicio","Fecha Req.","Prioridad","Estado","Recursos Solicitados","Recursos Asignados","Contactos","Imputación","Acciones"].map(h=>(
+                    <th key={h} style={{padding:"12px 14px",textAlign:"left",fontWeight:700,color:"#374151",whiteSpace:"nowrap"}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.length===0&&<tr><td colSpan={13} style={{padding:32,textAlign:"center",color:"#9ca3af"}}>No hay requerimientos</td></tr>}
+                {filtered.map((r,i)=>(
+                  <tr key={r._docId||i} style={{borderBottom:"1px solid #f3f4f6",background:i%2===0?"#fff":"#fafafa"}}>
+                    <td style={{padding:"11px 14px",fontWeight:700,color:"#2563eb",whiteSpace:"nowrap"}}>{r.id}</td>
+                    <td style={{padding:"11px 14px",color:"#6b7280",whiteSpace:"nowrap"}}>{r.fechaCreacion}</td>
+                    <td style={{padding:"11px 14px",maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.area}</td>
+                    <td style={{padding:"11px 14px",whiteSpace:"nowrap"}}><Badge color="#6366f1" text={`📍 ${r.locacion}`}/></td>
+                    <td style={{padding:"11px 14px",whiteSpace:"nowrap"}}><Badge color="#2563eb" text={`${servicioIcon[r.servicio]} ${r.servicio}`}/></td>
+                    <td style={{padding:"11px 14px",whiteSpace:"nowrap"}}>{r.fechaRequerida}</td>
+                    <td style={{padding:"11px 14px"}}><Badge color={prioridadColor[r.prioridad]} text={r.prioridad}/></td>
+                    <td style={{padding:"11px 14px"}}><Badge color={estadoColor[r.estado]} text={r.estado}/></td>
+                    <td style={{padding:"11px 14px",maxWidth:160,fontSize:12}}>
+                      {(r.recursosSolicitados||[]).map((rs,idx)=>(
+                        <div key={idx} style={{whiteSpace:"nowrap"}}>🔸 {rs.equipo==="__custom__"?rs.custom:rs.equipo} <strong>×{rs.cantidad}</strong></div>
+                      ))}
+                    </td>
+                    <td style={{padding:"11px 14px",maxWidth:160,fontSize:12}}>
+                      {!(r.recursosAsignados||[]).length
+                        ?<span style={{color:"#d1d5db"}}>Sin asignar</span>
+                        :(r.recursosAsignados||[]).map((ra,idx)=>(
+                          <div key={idx} style={{whiteSpace:"nowrap",color:"#10b981"}}>✅ {ra.equipo==="__custom__"?ra.custom:ra.equipo} <strong>×{ra.cantidad}</strong></div>
+                        ))}
+                    </td>
+                    <td style={{padding:"11px 14px",fontSize:12,maxWidth:150}}>
+                      {(r.contactos||[]).filter(c=>c.nombre).map((c,idx)=>(
+                        <div key={idx} style={{whiteSpace:"nowrap"}}>👤 {c.nombre} {c.telefono&&<a href={`https://wa.me/549${c.telefono}`} target="_blank" rel="noreferrer" style={{color:"#25d366",textDecoration:"none"}}>📱</a>}</div>
+                      ))}
+                    </td>
+                    <td style={{padding:"11px 14px",fontSize:12,maxWidth:130,color:r.imputacionCosto?"#374151":"#d1d5db",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                      {r.imputacionCosto||"—"}
+                    </td>
+                    <td style={{padding:"11px 14px",whiteSpace:"nowrap"}}>
+                      <div style={{display:"flex",gap:6}}>
+                        {r.estado!=="Completado"&&r.estado!=="Cancelado"&&(
+                          <button onClick={()=>abrirAsignar(r)} style={{background:"#eff6ff",color:"#2563eb",border:"1px solid #bfdbfe",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontSize:12,fontWeight:600}}>{r.estado==="Pendiente"?"Asignar":"Editar"}</button>
+                        )}
+                        {r.estado==="En Proceso"&&<button onClick={()=>completar(r)} style={{background:"#f0fdf4",color:"#10b981",border:"1px solid #bbf7d0",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontSize:12,fontWeight:600}}>✓</button>}
+                        {r.estado==="Pendiente"&&<button onClick={()=>cancelar(r)} style={{background:"#fef2f2",color:"#ef4444",border:"1px solid #fecaca",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontSize:12,fontWeight:600}}>✕</button>}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      {/* Modal Asignar */}
+      {asignando&&(
+        <div style={{position:"fixed",inset:0,background:"#0007",display:"flex",alignItems:"center",justifyContent:"center",zIndex:100,padding:16}}>
+          <div style={{background:"#fff",borderRadius:14,padding:28,width:760,maxWidth:"100%",maxHeight:"90vh",overflowY:"auto",boxShadow:"0 20px 60px #0003"}}>
+            <h3 style={{margin:"0 0 4px",color:"#1e3a5f"}}>Asignar Requerimiento</h3>
+            <div style={{color:"#6b7280",fontSize:13,marginBottom:8}}>{asignando.id} · {servicioIcon[asignando.servicio]} {asignando.servicio}</div>
+
+            {/* Info del requerimiento */}
+            <div style={{background:"#f8fafc",borderRadius:8,padding:"12px 16px",marginBottom:16,fontSize:13,display:"flex",flexWrap:"wrap",gap:12}}>
+              <span><span style={{color:"#6b7280"}}>Área:</span> <strong>{asignando.area}</strong></span>
+              <span>📍 <strong>{asignando.locacion}</strong></span>
+              <span>📅 <strong>{asignando.fechaRequerida}</strong></span>
+              <Badge color={prioridadColor[asignando.prioridad]} text={asignando.prioridad}/>
+            </div>
+
+            {/* Datos específicos del servicio (readonly) */}
+            {asignando.servicio==="Carga Terrestre"&&(asignando.origen||asignando.destino)&&(
+              <div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:8,padding:"12px 16px",marginBottom:14,fontSize:13}}>
+                <div style={{fontWeight:700,color:"#1e40af",marginBottom:8}}>🚛 Carga Terrestre</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                  {asignando.origen&&<div>📦 <strong>Origen:</strong> {asignando.origen} {asignando.contactoOrigen?.nombre&&`— ${asignando.contactoOrigen.nombre}`}</div>}
+                  {asignando.destino&&<div>🏁 <strong>Destino:</strong> {asignando.destino} {asignando.contactoDestino?.nombre&&`— ${asignando.contactoDestino.nombre}`}</div>}
+                  {asignando.pesoDimensionesCarga&&<div>⚖️ <strong>Peso/Dim:</strong> {asignando.pesoDimensionesCarga}</div>}
+                </div>
+              </div>
+            )}
+            {asignando.servicio==="Izajes"&&(asignando.pesoEquipoIzar||asignando.distanciaEquipo)&&(
+              <div style={{background:"#f5f3ff",border:"1px solid #ddd6fe",borderRadius:8,padding:"12px 16px",marginBottom:14,fontSize:13}}>
+                <div style={{fontWeight:700,color:"#6d28d9",marginBottom:8}}>🏗️ Datos de Izaje</div>
+                {asignando.pesoEquipoIzar&&<div>⚖️ <strong>Peso:</strong> {asignando.pesoEquipoIzar}</div>}
+                {asignando.dimensionesEquipoIzar&&<div>📐 <strong>Dimensiones:</strong> {asignando.dimensionesEquipoIzar}</div>}
+                {asignando.distanciaEquipo&&<div>📏 <strong>Distancia posicionamiento:</strong> {asignando.distanciaEquipo}</div>}
+              </div>
+            )}
+
+            {/* Contactos y permisos */}
+            {(asignando.contactos||[]).some(c=>c.nombre)&&(
+              <div style={{background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:8,padding:"10px 14px",marginBottom:14,fontSize:13}}>
+                <div style={{fontWeight:700,color:"#166534",marginBottom:6}}>👤 Contactos</div>
+                {(asignando.contactos||[]).filter(c=>c.nombre).map((c,i)=>(
+                  <div key={i}>• {c.nombre} {c.telefono&&<a href={`https://wa.me/549${c.telefono}`} target="_blank" rel="noreferrer" style={{color:"#25d366"}}>📱 {c.telefono}</a>}</div>
+                ))}
+              </div>
+            )}
+            {(asignando.responsablesPermiso||[]).some(r=>r.nombre)&&(
+              <div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:8,padding:"10px 14px",marginBottom:14,fontSize:13}}>
+                <div style={{fontWeight:700,color:"#92400e",marginBottom:6}}>📄 Responsables del Permiso de Trabajo</div>
+                {(asignando.responsablesPermiso||[]).filter(r=>r.nombre).map((r,i)=>(
+                  <div key={i}>• {r.nombre} {r.telefono&&<a href={`https://wa.me/549${r.telefono}`} target="_blank" rel="noreferrer" style={{color:"#25d366"}}>📱 {r.telefono}</a>}</div>
+                ))}
+              </div>
+            )}
+
+            {/* Recursos solicitados */}
+            <div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:8,padding:"12px 16px",marginBottom:16}}>
+              <div style={{fontSize:13,fontWeight:700,color:"#92400e",marginBottom:8}}>📋 Recursos Solicitados</div>
+              {(asignando.recursosSolicitados||[]).map((rs,i)=>(
+                <div key={i} style={{fontSize:13,color:"#78350f",marginBottom:4}}>🔸 <strong>{rs.equipo==="__custom__"?rs.custom:rs.equipo}</strong> — ×{rs.cantidad}</div>
+              ))}
+            </div>
+
+            <div style={{fontWeight:700,color:"#1e3a5f",fontSize:14,marginBottom:10}}>⚙️ Recursos a Asignar</div>
+            <RecursosEditor recursos={asignForm.recursosAsignados} onChange={v=>setAsignForm(p=>({...p,recursosAsignados:v}))} servicio={asignando.servicio} asignacion={true}/>
+
+            <div style={{marginTop:16}}>
+              <label style={{fontSize:13,fontWeight:600,color:"#374151",marginBottom:4,display:"block"}}>Fecha y Hora Programada</label>
+              <input type="datetime-local" style={{padding:"9px 12px",borderRadius:7,border:"1.5px solid #d1d5db",fontSize:14,outline:"none",background:"#fff"}} value={asignForm.fechaProgramada} onChange={e=>setAsignForm(p=>({...p,fechaProgramada:e.target.value}))}/>
+            </div>
+
+            <div style={{display:"flex",gap:10,marginTop:20}}>
+              <button onClick={()=>setAsignando(null)} style={{flex:1,background:"#f3f4f6",color:"#374151",border:"none",borderRadius:8,padding:11,fontWeight:600,cursor:"pointer"}}>Cancelar</button>
+              <button onClick={guardarAsignacion} style={{flex:2,background:"#2563eb",color:"#fff",border:"none",borderRadius:8,padding:11,fontWeight:700,cursor:"pointer"}}>Guardar Asignación</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
 </script>
 </body>
 </html>
