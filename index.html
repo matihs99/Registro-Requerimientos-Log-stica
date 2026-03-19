@@ -62,7 +62,7 @@ const EQUIPOS_POR_SERVICIO = {
   "Mantenimiento de Caminos":["Motoniveladora","Pala Cargadora","Camión Regador","Camión Volcador","Camión de Riego"],
   "Cargas Líquidas":         ["Camión Cisterna"],
   "Transporte de Agua":      ["Cisterna 10m3","Cisterna 35m3"],
-  "Provisión de GasOil":     ["Grado 2","Grado 3"],
+  "Provisión de GasOil":     [],
 };
 
 const estadoColor    = {Pendiente:"#f59e0b","En Proceso":"#3b82f6",Completado:"#10b981",Cancelado:"#6b7280"};
@@ -79,7 +79,7 @@ const emptyReq = () => ({
   origen:"",contactoOrigen:{nombre:"",telefono:""},
   destino:"",contactoDestino:{nombre:"",telefono:""},
   pesoDimensionesCarga:"",pesoEquipoIzar:"",dimensionesEquipoIzar:"",distanciaEquipo:"",
-  litrosGasOil:"",
+  litrosGasOil:"", gradoGasOil:"",
 });
 
 // ── Estilos base ───────────────────────────────────────────────────────────
@@ -278,7 +278,15 @@ function CamposGasOil({req,setReq}){
   return(
     <Seccion titulo="⛽ Datos de Provisión de GasOil" color="#b45309">
       <div style={S.field}>
-        <label style={S.label}>Cantidad de Litros *</label>
+        <label style={S.label}>Grado</label>
+        <select style={S.input()} value={req.gradoGasOil} onChange={e=>upd("gradoGasOil",e.target.value)}>
+          <option value="">Seleccioná el grado...</option>
+          <option value="Grado 2">Grado 2</option>
+          <option value="Grado 3">Grado 3</option>
+        </select>
+      </div>
+      <div style={S.field}>
+        <label style={S.label}>Cantidad de Litros</label>
         <div style={{position:"relative"}}>
           <input style={{...S.input(),paddingRight:40}} value={req.litrosGasOil}
             onChange={e=>upd("litrosGasOil",e.target.value.replace(/\D/g,""))}
