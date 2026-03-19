@@ -281,6 +281,7 @@ function App(){
   const [newReq,setNewReq]     = useState(emptyReq());
   const [submitted,setSubmitted] = useState(false);
   const [lastId,setLastId]     = useState("");
+  const [enviando,setEnviando] = useState(false);
   const [errors,setErrors]     = useState({});
 
   useEffect(()=>{
@@ -320,11 +321,19 @@ function App(){
   const submitReq=async()=>{
     const e=validate();
     if(Object.keys(e).length){setErrors(e);return;}
-    await db.collection(COL).add({...newReq,id:"",estado:"Pendiente",fechaCreacion:new Date().toISOString().split("T")[0],recursosAsignados:[],fechaProgramada:"",_ts:Date.now()});
+    setEnviando(true);
+    try {
+      await db.collection(COL).add({...newReq,id:"",estado:"Pendiente",fechaCreacion:new Date().toISOString().split("T")[0],recursosAsignados:[],fechaProgramada:"",_ts:Date.now()});
+      setSubmitted(true);
+    } catch(err) {
+      console.error(err);
+    } finally {
+      setEnviando(false);
+    }
     setLastId(id); setSubmitted(true);
   };
 
-  const resetForm=()=>{ setNewReq(emptyReq()); setSubmitted(false); setErrors({}); };
+  const resetForm=()=>{ setNewReq(emptyReq()); setSubmitted(false); setEnviando(false); setErrors({}); };
 
   const abrirAsignar=req=>{
     setAsignando(req);
@@ -491,9 +500,10 @@ function App(){
               <textarea style={{...fld(),height:80,resize:"vertical"}} value={newReq.observaciones} onChange={e=>setNewReq(p=>({...p,observaciones:e.target.value}))} placeholder="Cualquier información adicional relevante..."/>
             </div>
 
-            <button onClick={submitReq} style={{background:"#2563eb",color:"#fff",border:"none",borderRadius:9,padding:14,fontWeight:700,fontSize:15,cursor:"pointer"}}>
-              Enviar Requerimiento →
+            <button onClick={submitReq} disabled={enviando} style={{background: enviando ? "#93c5fd" : "#2563eb",color:"#fff",border:"none",borderRadius:9,padding:14,fontWeight:700,fontSize:15,cursor: enviando ? "not-allowed" : "pointer",transition:"background .2s",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+              {enviando ? <><span style={{display:"inline-block",width:16,height:16,border:"2px solid #fff",borderTopColor:"transparent",borderRadius:"50%",animation:"spin .7s linear infinite"}}/> Enviando...</> : "Enviar Requerimiento →"}
             </button>
+            <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
           </div>
         )}
       </div>
