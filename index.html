@@ -18,8 +18,6 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
   <!-- Export -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <!-- Email -->
   <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
@@ -176,83 +174,7 @@ function exportExcel(reqs){
   XLSX.writeFile(wb,`requerimientos-${new Date().toISOString().split('T')[0]}.xlsx`);
 }
 
-function exportPDFReport(reqs){
-  const {jsPDF}=window.jspdf;
-  const doc=new jsPDF('l','mm','a4');
-  const fecha=new Date().toLocaleDateString('es-AR');
-  doc.setFillColor(30,58,95); doc.rect(0,0,297,22,'F');
-  doc.setTextColor(255); doc.setFontSize(15); doc.setFont(undefined,'bold');
-  doc.text('Reporte de Requerimientos Logísticos',14,14);
-  doc.setFontSize(9); doc.setFont(undefined,'normal');
-  doc.text(`Generado: ${fecha}  |  Total: ${reqs.length}  |  Pendientes: ${reqs.filter(r=>r.estado==='Pendiente').length}  |  En Proceso: ${reqs.filter(r=>r.estado==='En Proceso').length}  |  Completados: ${reqs.filter(r=>r.estado==='Completado').length}`,185,14);
-  doc.setTextColor(0);
-  doc.autoTable({
-    startY:27,
-    head:[['ID','Fecha','Área','Locación','Servicio','Fecha Req.','Prioridad','Estado','Imputación','Recurso Asignado','Responsable']],
-    body:reqs.map(r=>[
-      r.id||'—',r.fechaCreacion||'',r.area||'',r.locacion||'',r.servicio||'',
-      r.fechaRequerida||'',r.prioridad||'',r.estado||'',r.imputacionCosto||'—',
-      (r.recursosAsignados||[]).filter(ra=>ra.equipo).map(ra=>`${ra.equipo==='__custom__'?ra.custom:ra.equipo} ×${ra.cantidad}`).join('\n')||'—',
-      (r.recursosAsignados||[]).map(ra=>ra.responsable).filter(Boolean).join('\n')||'—',
-    ]),
-    styles:{fontSize:8,cellPadding:2.5,overflow:'linebreak'},
-    headStyles:{fillColor:[37,99,235],textColor:255,fontStyle:'bold',fontSize:8},
-    alternateRowStyles:{fillColor:[248,250,252]},
-    columnStyles:{0:{cellWidth:16},1:{cellWidth:18},2:{cellWidth:28},3:{cellWidth:22},4:{cellWidth:32},5:{cellWidth:18},6:{cellWidth:16},7:{cellWidth:18},8:{cellWidth:20},9:{cellWidth:30},10:{cellWidth:28}},
-  });
-  doc.save(`reporte-logistico-${new Date().toISOString().split('T')[0]}.pdf`);
-}
 
-function exportReqPDF(r){
-  const {jsPDF}=window.jspdf;
-  const doc=new jsPDF();
-  const fecha=new Date().toLocaleDateString('es-AR');
-  // Header
-  doc.setFillColor(30,58,95); doc.rect(0,0,210,26,'F');
-  doc.setTextColor(255); doc.setFontSize(15); doc.setFont(undefined,'bold');
-  doc.text('Requerimiento Logístico',14,13);
-  doc.setFontSize(10); doc.setFont(undefined,'normal');
-  doc.text(`${r.id||'Sin ID asignado'} — ${servicioIcon[r.servicio]||''} ${r.servicio||''}`,14,21);
-  doc.setTextColor(0);
-  // Info general
-  doc.autoTable({startY:31,head:[['Campo','Detalle']],body:[
-    ['Área Solicitante',r.area||'—'],['Locación',r.locacion||'—'],
-    ['Email Solicitante',r.emailSolicitante||'—'],['Fecha Requerida',r.fechaRequerida||'—'],
-    ['Fecha Programada',r.fechaProgramada||'—'],['Prioridad',r.prioridad||'—'],
-    ['Estado',r.estado||'—'],['Imputación del Costo',r.imputacionCosto||'—'],
-  ],styles:{fontSize:10},headStyles:{fillColor:[30,58,95],textColor:255},columnStyles:{0:{cellWidth:55,fontStyle:'bold'},1:{cellWidth:125}},margin:{left:14,right:14}});
-  let y=doc.lastAutoTable.finalY+5;
-  // Datos específicos
-  const sp=[];
-  if(r.servicio==='Carga Terrestre'){
-    if(r.origen)sp.push(['Origen',r.origen+(r.contactoOrigen?.nombre?` — ${r.contactoOrigen.nombre} ${r.contactoOrigen.telefono||''}`:'')])
-    if(r.destino)sp.push(['Destino',r.destino+(r.contactoDestino?.nombre?` — ${r.contactoDestino.nombre} ${r.contactoDestino.telefono||''}`:'')])
-    if(r.pesoDimensionesCarga)sp.push(['Peso / Dimensiones',r.pesoDimensionesCarga]);
-  }
-  if(r.servicio==='Izajes'){
-    if(r.pesoEquipoIzar)sp.push(['Peso equipo a izar',r.pesoEquipoIzar]);
-    if(r.dimensionesEquipoIzar)sp.push(['Dimensiones equipo',r.dimensionesEquipoIzar]);
-    if(r.distanciaEquipo)sp.push(['Distancia posicionamiento',r.distanciaEquipo]);
-  }
-  if(r.servicio==='Provisión de GasOil'){
-    if(r.gradoGasOil)sp.push(['Grado',r.gradoGasOil]);
-    if(r.litrosGasOil)sp.push(['Litros',`${r.litrosGasOil} lts`]);
-  }
-  if(sp.length){doc.autoTable({startY:y,head:[['Datos del Servicio','']],body:sp,styles:{fontSize:10},headStyles:{fillColor:[124,58,237],textColor:255},columnStyles:{0:{cellWidth:55,fontStyle:'bold'},1:{cellWidth:125}},margin:{left:14,right:14}});y=doc.lastAutoTable.finalY+5;}
-  // Recursos solicitados
-  if((r.recursosSolicitados||[]).length){doc.autoTable({startY:y,head:[['Recursos Solicitados','Cant.']],body:(r.recursosSolicitados||[]).map(rs=>[rs.equipo==='__custom__'?rs.custom:rs.equipo,`×${rs.cantidad}`]),styles:{fontSize:10},headStyles:{fillColor:[245,158,11],textColor:255},columnStyles:{0:{cellWidth:160},1:{cellWidth:20}},margin:{left:14,right:14}});y=doc.lastAutoTable.finalY+5;}
-  // Recursos asignados
-  const rasig=(r.recursosAsignados||[]).filter(ra=>ra.equipo);
-  if(rasig.length){doc.autoTable({startY:y,head:[['Recurso Asignado','Cant.','Proveedor','Responsable']],body:rasig.map(ra=>[ra.equipo==='__custom__'?ra.custom:ra.equipo,`×${ra.cantidad}`,ra.proveedor||'—',ra.responsable||'—']),styles:{fontSize:10},headStyles:{fillColor:[16,185,129],textColor:255},columnStyles:{0:{cellWidth:50},1:{cellWidth:16},2:{cellWidth:62},3:{cellWidth:52}},margin:{left:14,right:14}});y=doc.lastAutoTable.finalY+5;}
-  // Contactos
-  const cs=(r.contactos||[]).filter(c=>c.nombre);
-  if(cs.length){doc.autoTable({startY:y,head:[['Contacto','Teléfono']],body:cs.map(c=>[c.nombre,c.telefono||'—']),styles:{fontSize:10},headStyles:{fillColor:[99,102,241],textColor:255},columnStyles:{0:{cellWidth:95},1:{cellWidth:85}},margin:{left:14,right:14}});y=doc.lastAutoTable.finalY+5;}
-  // Observaciones
-  if(r.observaciones){doc.setFontSize(10);doc.setFont(undefined,'bold');doc.text('Observaciones:',14,y+4);doc.setFont(undefined,'normal');doc.text(doc.splitTextToSize(r.observaciones,182),14,y+10);}
-  // Footer
-  doc.setFontSize(8);doc.setTextColor(150);doc.text(`Generado: ${fecha}`,14,287);
-  doc.save(`req-${(r.id||'sin-id').replace(/[^a-z0-9]/gi,'-')}.pdf`);
-}
 
 // ── Editores dinámicos ─────────────────────────────────────────────────────
 function PersonasEditor({personas,onChange,titulo}){
@@ -368,6 +290,157 @@ function CamposGasOil({req,setReq}){
   </Seccion>);
 }
 
+// ── Componentes de Métricas ────────────────────────────────────────────────
+function KPICard({label,value,sub,color,icon,alert}){
+  return(
+    <div style={{background:alert?"#fef2f2":"#fff",border:`1px solid ${alert?"#fecaca":"#e5e7eb"}`,borderRadius:10,padding:"14px 16px",flex:1,minWidth:130}}>
+      <div style={{fontSize:20}}>{icon}</div>
+      <div style={{fontSize:24,fontWeight:800,color:alert?"#ef4444":color,marginTop:4}}>{value}</div>
+      <div style={{fontSize:12,color:"#6b7280",marginTop:2,fontWeight:600}}>{label}</div>
+      {sub&&<div style={{fontSize:11,color:alert?"#ef4444":"#9ca3af",marginTop:2}}>{sub}</div>}
+    </div>
+  );
+}
+function BarChart({data,color="#2563eb",height=130}){
+  const max=Math.max(...data.map(d=>d.value),1);
+  return(
+    <div style={{display:"flex",alignItems:"flex-end",gap:6,height,padding:"0 4px"}}>
+      {data.map((d,i)=>(
+        <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:3,minWidth:0}}>
+          <span style={{fontSize:11,fontWeight:700,color:"#374151"}}>{d.value||""}</span>
+          <div style={{width:"100%",background:typeof color==="function"?color(i):color,borderRadius:"4px 4px 0 0",height:`${(d.value/max)*75}%`,minHeight:d.value?3:0,transition:"height .4s"}}/>
+          <span style={{fontSize:10,color:"#9ca3af",textAlign:"center",lineHeight:1.2,width:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.label}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+function HBar({label,value,max,color="#2563eb"}){
+  return(
+    <div style={{marginBottom:10}}>
+      <div style={{display:"flex",justifyContent:"space-between",fontSize:13,marginBottom:4}}>
+        <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:"75%"}}>{label}</span>
+        <span style={{fontWeight:700,color}}>{value}</span>
+      </div>
+      <div style={{background:"#f3f4f6",borderRadius:99,height:8}}>
+        <div style={{background:color,borderRadius:99,height:8,width:`${max?(value/max)*100:0}%`,transition:"width .4s"}}/>
+      </div>
+    </div>
+  );
+}
+function MetricasView({reqs,onBack,online,pendingWrites}){
+  const [periodo,setPeriodo]=useState(30);
+  const ahora=new Date();
+  const hoy=ahora.toISOString().split('T')[0];
+  const sColors=["#2563eb","#7c3aed","#10b981","#f59e0b","#3b82f6","#ef4444"];
+
+  const filtrados=reqs.filter(r=>{
+    if(periodo===-1)return true;
+    if(periodo===0){const f=new Date(r.fechaCreacion||hoy);return f.getMonth()===ahora.getMonth()&&f.getFullYear()===ahora.getFullYear();}
+    const f=new Date(r.fechaCreacion||hoy);
+    return(ahora-f)/(1000*60*60*24)<=periodo;
+  });
+
+  const total=filtrados.length;
+  const pendientes=filtrados.filter(r=>r.estado==="Pendiente").length;
+  const enProceso=filtrados.filter(r=>r.estado==="En Proceso").length;
+  const completados=filtrados.filter(r=>r.estado==="Completado").length;
+  const cancelados=filtrados.filter(r=>r.estado==="Cancelado").length;
+  const reprogramados=filtrados.reduce((a,r)=>a+(r.reprogramaciones||0),0);
+  const vencidos=filtrados.filter(r=>r.fechaRequerida<hoy&&r.estado!=="Completado"&&r.estado!=="Cancelado").length;
+  const urgentes=filtrados.filter(r=>(r.prioridad==="Urgente"||r.prioridad==="Alta")&&r.estado==="Pendiente").length;
+  const pctCompletado=total>0?Math.round((completados/total)*100):0;
+
+  const conProg=filtrados.filter(r=>r.fechaProgramada&&r.fechaCreacion);
+  const avgAsig=conProg.length>0
+    ?Math.round(conProg.reduce((a,r)=>{const d=(new Date(r.fechaProgramada.split('T')[0])-new Date(r.fechaCreacion))/(1000*60*60*24);return a+Math.max(0,d);},0)/conProg.length)
+    :null;
+
+  const porServicio=SERVICIOS.map((s,i)=>({label:s.split(' ')[0],value:filtrados.filter(r=>r.servicio===s).length,full:s}));
+  const porLocacion=LOCACIONES.map(l=>({label:l.split(' ')[0],value:filtrados.filter(r=>r.locacion===l).length}));
+
+  const imputMap={};
+  filtrados.forEach(r=>{if(r.imputacionCosto)imputMap[r.imputacionCosto]=(imputMap[r.imputacionCosto]||0)+1;});
+  const topImput=Object.entries(imputMap).sort((a,b)=>b[1]-a[1]).slice(0,6);
+  const maxImput=topImput[0]?.[1]||1;
+
+  const semanas=Array.from({length:8},(_,i)=>{
+    const desde=new Date(ahora);desde.setDate(desde.getDate()-(7-i)*7);
+    const hasta=new Date(ahora);hasta.setDate(hasta.getDate()-(6-i)*7);
+    const ds=desde.toISOString().split('T')[0],hs=hasta.toISOString().split('T')[0];
+    return{label:`S${i+1}`,value:reqs.filter(r=>(r.fechaCreacion||'')>=ds&&(r.fechaCreacion||'')<hs).length};
+  });
+
+  const Card=({title,children})=>(
+    <div style={{background:"#fff",borderRadius:12,padding:20,border:"1px solid #e5e7eb"}}>
+      <div style={{fontWeight:700,color:"#1e3a5f",fontSize:14,marginBottom:16}}>{title}</div>
+      {children}
+    </div>
+  );
+
+  return(
+    <div style={{minHeight:"100vh",background:"#f1f5f9"}}>
+      <StatusBar online={online} pendingWrites={pendingWrites}/>
+      <div style={{background:"linear-gradient(90deg,#1e3a5f,#2563eb)",padding:"14px 20px",display:"flex",alignItems:"center",gap:12,position:"sticky",top:0,zIndex:50}}>
+        <button onClick={onBack} style={{background:"rgba(255,255,255,.15)",border:"none",color:"#fff",cursor:"pointer",fontSize:18,borderRadius:8,width:36,height:36,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>←</button>
+        <div style={{flex:1}}><div style={{color:"#fff",fontWeight:700,fontSize:16}}>📈 Métricas y KPIs</div><div style={{color:"#93c5fd",fontSize:11}}>Panel de indicadores logísticos</div></div>
+        <select value={periodo} onChange={e=>setPeriodo(Number(e.target.value))}
+          style={{background:"rgba(255,255,255,.15)",color:"#fff",border:"1px solid rgba(255,255,255,.3)",borderRadius:8,padding:"7px 12px",fontSize:13,fontWeight:600,outline:"none",cursor:"pointer",WebkitAppearance:"none"}}>
+          <option value={7} style={{color:"#000"}}>Últimos 7 días</option>
+          <option value={30} style={{color:"#000"}}>Últimos 30 días</option>
+          <option value={0} style={{color:"#000"}}>Mes actual</option>
+          <option value={-1} style={{color:"#000"}}>Todo el historial</option>
+        </select>
+      </div>
+
+      <div style={{maxWidth:1200,margin:"0 auto",padding:"20px 14px"}}>
+        {/* KPIs volumen */}
+        <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:14}}>
+          <KPICard label="Total" value={total} color="#2563eb" icon="📋"/>
+          <KPICard label="Pendientes" value={pendientes} color="#f59e0b" icon="⏳"/>
+          <KPICard label="En Proceso" value={enProceso} color="#3b82f6" icon="⚙️"/>
+          <KPICard label="Completados" value={completados} color="#10b981" icon="✅"/>
+          <KPICard label="Cancelados" value={cancelados} color="#6b7280" icon="❌"/>
+          <KPICard label="Reprogramados" value={reprogramados} color="#7c3aed" icon="🔄" sub="cambios post-asignación"/>
+        </div>
+        {/* KPIs alertas */}
+        <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:20}}>
+          <KPICard label="Vencidos" value={vencidos} color="#ef4444" icon="⚠️" alert={vencidos>0} sub="sin completar, fuera de fecha"/>
+          <KPICard label="Alta/Urgente sin asignar" value={urgentes} color="#ef4444" icon="🚨" alert={urgentes>0}/>
+          <KPICard label="% Completados" value={`${pctCompletado}%`} color="#10b981" icon="📊" sub={`${completados} de ${total}`}/>
+          <KPICard label="Días prom. a programar" value={avgAsig!==null?`${avgAsig}d`:"—"} color="#2563eb" icon="⏱️" sub="creación → fecha programada"/>
+        </div>
+        {/* Distribuciones */}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
+          <Card title="📦 Por Tipo de Servicio"><BarChart data={porServicio} color={i=>sColors[i%sColors.length]} height={150}/></Card>
+          <Card title="📍 Por Locación"><BarChart data={porLocacion} color="#6366f1" height={150}/></Card>
+        </div>
+        {/* Evolución + Imputaciones */}
+        <div style={{display:"grid",gridTemplateColumns:"3fr 2fr",gap:16,marginBottom:16}}>
+          <Card title="📈 Evolución Semanal (últimas 8 semanas)"><BarChart data={semanas} color="#2563eb" height={150}/></Card>
+          <Card title="💰 Top Imputaciones de Costo">
+            {topImput.length===0
+              ?<div style={{color:"#9ca3af",fontSize:13,textAlign:"center",padding:"20px 0"}}>Sin datos en el período</div>
+              :topImput.map(([imp,cnt])=><HBar key={imp} label={imp} value={cnt} max={maxImput} color="#2563eb"/>)}
+          </Card>
+        </div>
+        {/* Prioridad + Reprogramaciones por servicio */}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
+          <Card title="🎯 Distribución por Prioridad">
+            <BarChart data={PRIORIDADES.map(p=>({label:p,value:filtrados.filter(r=>r.prioridad===p).length}))} color={i=>Object.values(prioridadColor)[i]} height={130}/>
+          </Card>
+          <Card title="🔄 Reprogramaciones por Servicio">
+            {SERVICIOS.map((s,i)=>{
+              const val=filtrados.filter(r=>r.servicio===s).reduce((a,r)=>a+(r.reprogramaciones||0),0);
+              return <HBar key={s} label={`${servicioIcon[s]} ${s}`} value={val} max={Math.max(reprogramados,1)} color="#7c3aed"/>;
+            })}
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── App ────────────────────────────────────────────────────────────────────
 function App(){
   const [view,setView]           = useState("home");
@@ -441,11 +514,14 @@ function App(){
 
   const guardarAsignacion=async()=>{
     const esNuevoId=asignForm.id&&asignForm.id!==asignando.id;
-    await db.collection(COL).doc(asignando._docId).update({
+    const esReprog=asignando.estado==="En Proceso";
+    const updateData={
       id:asignForm.id,recursosAsignados:asignForm.recursosAsignados,
       fechaProgramada:asignForm.fechaProgramada,
-      estado:asignForm.recursosAsignados.some(ra=>ra.equipo)?"En Proceso":asignando.estado
-    });
+      estado:asignForm.recursosAsignados.some(ra=>ra.equipo)?"En Proceso":asignando.estado,
+    };
+    if(esReprog) updateData.reprogramaciones=firebase.firestore.FieldValue.increment(1);
+    await db.collection(COL).doc(asignando._docId).update(updateData);
     // Enviar email si se asignó ID y el solicitante ingresó email
     if(esNuevoId&&asignando.emailSolicitante&&EMAILJS_PUBLIC_KEY!=="TU_PUBLIC_KEY"){
       try{
@@ -475,6 +551,8 @@ function App(){
       <div><div style={{color:"#fff",fontWeight:700,fontSize:16}}>{title}</div><div style={{color:"#93c5fd",fontSize:11}}>{sub}</div></div>
     </div>
   );
+
+  if(view==="metricas") return <MetricasView reqs={reqs} onBack={()=>setView("logistica")} online={online} pendingWrites={pending}/>;
 
   if(loading)return(<div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"linear-gradient(135deg,#1e3a5f,#2563eb)",flexDirection:"column",gap:16}}><div style={{fontSize:52}}>🏗️</div><div style={{color:"#fff",fontSize:18,fontWeight:600}}>Cargando...</div><div style={{color:"#93c5fd",fontSize:13}}>{navigator.onLine?"Conectando...":"Cargando datos locales..."}</div></div>);
 
@@ -616,10 +694,11 @@ function App(){
             style={{background:"rgba(255,255,255,.15)",color:"#fff",border:"1px solid rgba(255,255,255,.3)",borderRadius:8,padding:"7px 12px",cursor:"pointer",fontSize:13,fontWeight:600,whiteSpace:"nowrap"}}>
             📊 Excel
           </button>
-          <button onClick={()=>exportPDFReport(filtered)} title="Reporte PDF"
+          <button onClick={()=>setView("metricas")}
             style={{background:"rgba(255,255,255,.15)",color:"#fff",border:"1px solid rgba(255,255,255,.3)",borderRadius:8,padding:"7px 12px",cursor:"pointer",fontSize:13,fontWeight:600,whiteSpace:"nowrap"}}>
-            📄 PDF
+            📈 Métricas
           </button>
+
         </div>
       </div>
 
@@ -686,7 +765,7 @@ function App(){
                         )}
                         {r.estado==="En Proceso"&&<button onClick={()=>completar(r)} style={{background:"#f0fdf4",color:"#10b981",border:"1px solid #bbf7d0",borderRadius:6,padding:"5px 10px",cursor:"pointer",fontSize:12,fontWeight:600}}>✓</button>}
                         {r.estado==="Pendiente"&&<button onClick={()=>cancelar(r)} style={{background:"#fef2f2",color:"#ef4444",border:"1px solid #fecaca",borderRadius:6,padding:"5px 10px",cursor:"pointer",fontSize:12,fontWeight:600}}>✕</button>}
-                        <button onClick={()=>exportReqPDF(r)} title="Descargar PDF" style={{background:"#fef2f2",color:"#dc2626",border:"1px solid #fecaca",borderRadius:6,padding:"5px 8px",cursor:"pointer",fontSize:12,fontWeight:600}}>PDF</button>
+
                       </div>
                     </td>
                   </tr>
