@@ -281,7 +281,6 @@ function App(){
   const [newReq,setNewReq]     = useState(emptyReq());
   const [submitted,setSubmitted] = useState(false);
   const [lastId,setLastId]     = useState("");
-  const [idManual,setIdManual] = useState("");
   const [errors,setErrors]     = useState({});
 
   useEffect(()=>{
@@ -320,22 +319,21 @@ function App(){
 
   const submitReq=async()=>{
     const e=validate();
-    if(!idManual.trim()) e.id=true;
     if(Object.keys(e).length){setErrors(e);return;}
-    const id=idManual.trim();
-    await db.collection(COL).add({...newReq,id,estado:"Pendiente",fechaCreacion:new Date().toISOString().split("T")[0],recursosAsignados:[],fechaProgramada:"",_ts:Date.now()});
+    await db.collection(COL).add({...newReq,id:"",estado:"Pendiente",fechaCreacion:new Date().toISOString().split("T")[0],recursosAsignados:[],fechaProgramada:"",_ts:Date.now()});
     setLastId(id); setSubmitted(true);
   };
 
-  const resetForm=()=>{ setNewReq(emptyReq()); setIdManual(""); setSubmitted(false); setErrors({}); };
+  const resetForm=()=>{ setNewReq(emptyReq()); setSubmitted(false); setErrors({}); };
 
   const abrirAsignar=req=>{
     setAsignando(req);
-    setAsignForm({recursosAsignados:req.recursosAsignados?.length?req.recursosAsignados.map(r=>({...r})):[emptyAsignado()],fechaProgramada:req.fechaProgramada||""});
+    setAsignForm({id:req.id||"",recursosAsignados:req.recursosAsignados?.length?req.recursosAsignados.map(r=>({...r})):[emptyAsignado()],fechaProgramada:req.fechaProgramada||""});
   };
 
   const guardarAsignacion=async()=>{
     await db.collection(COL).doc(asignando._docId).update({
+      id: asignForm.id,
       recursosAsignados:asignForm.recursosAsignados,
       fechaProgramada:asignForm.fechaProgramada,
       estado:asignForm.recursosAsignados.some(ra=>ra.equipo)?"En Proceso":asignando.estado
@@ -422,17 +420,10 @@ function App(){
             {/* ── Datos básicos ── */}
             <Seccion titulo="📋 Datos Generales">
               <div style={{display:"grid",gap:14}}>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 2fr",gap:12}}>
-                  <div>
-                    <label style={lbl}>ID / N° de Solicitud *</label>
-                    <input style={fld(errors.id)} value={idManual} onChange={e=>{setIdManual(e.target.value);setErrors(p=>({...p,id:false}));}} placeholder="Ej: SOL-001, OT-2345..."/>
-                    {errors.id&&<span style={{color:"#ef4444",fontSize:12}}>Campo requerido</span>}
-                  </div>
-                  <div>
-                    <label style={lbl}>Área Solicitante *</label>
-                    <input style={fld(errors.area)} value={newReq.area} onChange={e=>{setNewReq(p=>({...p,area:e.target.value}));setErrors(p=>({...p,area:false}));}} placeholder="Ej: Mantenimiento, Operaciones, SSMA..."/>
-                    {errors.area&&<span style={{color:"#ef4444",fontSize:12}}>Campo requerido</span>}
-                  </div>
+                <div>
+                  <label style={lbl}>Área Solicitante *</label>
+                  <input style={fld(errors.area)} value={newReq.area} onChange={e=>{setNewReq(p=>({...p,area:e.target.value}));setErrors(p=>({...p,area:false}));}} placeholder="Ej: Mantenimiento, Operaciones, SSMA..."/>
+                  {errors.area&&<span style={{color:"#ef4444",fontSize:12}}>Campo requerido</span>}
                 </div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
                   <div>
@@ -614,7 +605,13 @@ function App(){
         <div style={{position:"fixed",inset:0,background:"#0007",display:"flex",alignItems:"center",justifyContent:"center",zIndex:100,padding:16}}>
           <div style={{background:"#fff",borderRadius:14,padding:28,width:760,maxWidth:"100%",maxHeight:"90vh",overflowY:"auto",boxShadow:"0 20px 60px #0003"}}>
             <h3 style={{margin:"0 0 4px",color:"#1e3a5f"}}>Asignar Requerimiento</h3>
-            <div style={{color:"#6b7280",fontSize:13,marginBottom:8}}>{asignando.id} · {servicioIcon[asignando.servicio]} {asignando.servicio}</div>
+            <div style={{color:"#6b7280",fontSize:13,marginBottom:8}}>{servicioIcon[asignando.servicio]} {asignando.servicio}</div>
+
+            {/* ID asignado por logística */}
+            <div style={{marginBottom:14}}>
+              <label style={{fontSize:13,fontWeight:600,color:"#374151",marginBottom:4,display:"block"}}>N° / ID de Solicitud</label>
+              <input style={{padding:"9px 12px",borderRadius:7,border:"1.5px solid #d1d5db",fontSize:14,outline:"none",background:"#fff",width:240}} value={asignForm.id} onChange={e=>setAsignForm(p=>({...p,id:e.target.value}))} placeholder="Ej: SOL-001, OT-2345..."/>
+            </div>
 
             {/* Info del requerimiento */}
             <div style={{background:"#f8fafc",borderRadius:8,padding:"12px 16px",marginBottom:16,fontSize:13,display:"flex",flexWrap:"wrap",gap:12}}>
