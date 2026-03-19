@@ -510,17 +510,17 @@ function App(){
             )}
 
             {/* ── Contactos ── */}
-            <Seccion titulo="👤 Personas de Contacto" defaultOpen={false}>
+            <Seccion titulo="👤 Personas de Contacto">
               <PersonasEditor personas={newReq.contactos} onChange={v=>setNewReq(p=>({...p,contactos:v}))} titulo="contacto"/>
             </Seccion>
 
             {/* ── Permiso de trabajo ── */}
-            <Seccion titulo="📄 Responsables del Permiso de Trabajo" defaultOpen={false}>
+            <Seccion titulo="📄 Responsables del Permiso de Trabajo">
               <PersonasEditor personas={newReq.responsablesPermiso} onChange={v=>setNewReq(p=>({...p,responsablesPermiso:v}))} titulo="responsable"/>
             </Seccion>
 
             {/* ── Imputación ── */}
-            <Seccion titulo="💰 Imputación del Costo *" defaultOpen={false}>
+            <Seccion titulo="💰 Imputación del Costo *">
               <input style={S.input(errors.imputacionCosto)} value={newReq.imputacionCosto}
                 onChange={e=>{setNewReq(p=>({...p,imputacionCosto:e.target.value}));setErrors(p=>({...p,imputacionCosto:false}));}}
                 placeholder="Ej: CC-1234 / OT-5678 / Proyecto Norte..."/>
@@ -528,7 +528,7 @@ function App(){
             </Seccion>
 
             {/* ── Observaciones ── */}
-            <Seccion titulo="📝 Observaciones" defaultOpen={false}>
+            <Seccion titulo="📝 Observaciones">
               <textarea style={{...S.input(),height:90,resize:"vertical"}} value={newReq.observaciones} onChange={e=>setNewReq(p=>({...p,observaciones:e.target.value}))} placeholder="Información adicional relevante..."/>
             </Seccion>
 
