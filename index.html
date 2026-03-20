@@ -266,7 +266,22 @@ function CamposGasOil({req,setReq}){
   </Seccion>);
 }
 
-// ── Métricas ───────────────────────────────────────────────────────────────
+// ── Abreviaturas corporativas ──────────────────────────────────────────────
+const ABREV_LOCACION = {
+  "La Calera":       "LCa",
+  "Bajo del Choique":"BdC",
+  "Rio Colorado":    "RCo",
+};
+const ABREV_SERVICIO = {
+  "Izajes":                  "Izajes",
+  "Carga Terrestre":         "C. Terrestre",
+  "Mantenimiento de Caminos":"Caminos",
+  "Cargas Líquidas":         "C. Líquidas",
+  "Transporte de Agua":      "Agua",
+  "Provisión de GasOil":     "Gasoil",
+};
+
+
 function KPICard({label,value,sub,color,icon,alert}){
   return(
     <div style={{background:alert?"#fef2f2":"#fff",border:`1px solid ${alert?"#fecaca":"#e5e7eb"}`,borderRadius:10,padding:"14px 16px",flex:1,minWidth:130}}>
@@ -327,8 +342,8 @@ function MetricasView({reqs,onBack,online,pendingWrites}){
   const conProg=filtrados.filter(r=>r.fechaProgramada&&r.fechaCreacion);
   const avgAsig=conProg.length>0?Math.round(conProg.reduce((a,r)=>{const d=(new Date(r.fechaProgramada.split('T')[0])-new Date(r.fechaCreacion))/(1000*60*60*24);return a+Math.max(0,d);},0)/conProg.length):null;
 
-  const porServicio=SERVICIOS.map((s,i)=>({label:s.split(' ')[0],value:filtrados.filter(r=>r.servicio===s).length,full:s}));
-  const porLocacion=LOCACIONES.map(l=>({label:l.split(' ')[0],value:filtrados.filter(r=>r.locacion===l).length}));
+  const porServicio=SERVICIOS.map((s,i)=>({label:ABREV_SERVICIO[s]||s,value:filtrados.filter(r=>r.servicio===s).length,full:s}));
+  const porLocacion=LOCACIONES.map(l=>({label:ABREV_LOCACION[l]||l,value:filtrados.filter(r=>r.locacion===l).length}));
 
   const imputMap={};
   filtrados.forEach(r=>{if(r.imputacionCosto)imputMap[r.imputacionCosto]=(imputMap[r.imputacionCosto]||0)+1;});
@@ -395,7 +410,7 @@ function MetricasView({reqs,onBack,online,pendingWrites}){
             <BarChart data={PRIORIDADES.map(p=>({label:p,value:filtrados.filter(r=>r.prioridad===p).length}))} color={i=>Object.values(prioridadColor)[i]} height={130}/>
           </Card>
           <Card title="🔄 Reprogramaciones por Servicio">
-            {SERVICIOS.map(s=>{const val=filtrados.filter(r=>r.servicio===s).reduce((a,r)=>a+(r.reprogramaciones||0),0);return <HBar key={s} label={`${servicioIcon[s]} ${s}`} value={val} max={Math.max(reprogramados,1)} color="#7c3aed"/>;})}</Card>
+            {SERVICIOS.map(s=>{const val=filtrados.filter(r=>r.servicio===s).reduce((a,r)=>a+(r.reprogramaciones||0),0);return <HBar key={s} label={`${servicioIcon[s]} ${ABREV_SERVICIO[s]||s}`} value={val} max={Math.max(reprogramados,1)} color="#7c3aed"/>;})}</Card>
         </div>
       </div>
     </div>
@@ -615,7 +630,7 @@ function App(){
         </div>
 
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:18}}>
-          <div style={{background:"#fff",borderRadius:10,padding:18,border:"1px solid #e5e7eb"}}><div style={{fontWeight:700,color:P303,marginBottom:12,fontSize:14}}>Por Servicio</div>{SERVICIOS.map(s=><MiniBar key={s} label={`${servicioIcon[s]} ${s}`} value={reqs.filter(r=>r.servicio===s).length} max={maxSvc} color={P314}/>)}</div>
+          <div style={{background:"#fff",borderRadius:10,padding:18,border:"1px solid #e5e7eb"}}><div style={{fontWeight:700,color:P303,marginBottom:12,fontSize:14}}>Por Servicio</div>{SERVICIOS.map(s=><MiniBar key={s} label={`${servicioIcon[s]} ${ABREV_SERVICIO[s]||s}`} value={reqs.filter(r=>r.servicio===s).length} max={maxSvc} color={P314}/>)}</div>
           <div style={{background:"#fff",borderRadius:10,padding:18,border:"1px solid #e5e7eb"}}><div style={{fontWeight:700,color:P303,marginBottom:12,fontSize:14}}>Por Estado</div>{ESTADOS.map(s=><MiniBar key={s} label={s} value={reqs.filter(r=>r.estado===s).length} max={reqs.length} color={estadoColor[s]}/>)}</div>
         </div>
 
