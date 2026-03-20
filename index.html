@@ -62,20 +62,50 @@ const P314  = "#0096B2";  // PANTONE 314 C — teal
 const GRAD  = `linear-gradient(90deg,${P303},${P314})`;
 const GRAD2 = `linear-gradient(135deg,${P303},${P314})`;
 
-const SERVICIOS   = ["Izajes","Carga Terrestre","Mantenimiento de Caminos","Cargas Líquidas","Transporte de Agua","Provisión de GasOil"];
+const SERVICIOS   = ["Izajes","Carga Terrestre","Mantenimiento de Caminos","Cargas Líquidas","Transporte de Agua y Efluentes","Provisión de GasOil","Servicios en Locación"];
 const ESTADOS     = ["Pendiente","En Proceso","Completado","Cancelado"];
 const PRIORIDADES = ["Baja","Media","Alta","Urgente"];
 const LOCACIONES  = ["La Calera","Bajo del Choique","Rio Colorado"];
 const EQUIPOS_POR_SERVICIO = {
-  "Izajes":                  ["Grúa 25T","Grúa 50T","Grúa 70T","Grúa 130T","Hidrogrúa"],
-  "Carga Terrestre":         ["Semirremolque","Hidrogrúa","Cama Baja","Furgón","Playo"],
-  "Mantenimiento de Caminos":["Motoniveladora","Pala Cargadora","Camión Regador","Camión Volcador","Camión de Riego"],
-  "Cargas Líquidas":         ["Camión Cisterna"],
-  "Transporte de Agua":      ["Cisterna 10m3","Cisterna 35m3"],
-  "Provisión de GasOil":     [],
+  "Izajes": [
+    "Hidrogrúa 5 TN","Hidrogrúa 7,5 TN","Hidrogrúa 12 TN",
+    "Grúa 60 TN","Grúa 70 TN","Grúa 80 TN","Grúa 90 TN","Grúa 100 TN","Grúa 130 TN","Grúa 160 TN","Grúa 220 TN",
+    "Manlift","Forklift (Manipulador)","Operador Manlift","Cuadrilla de izaje (señalero + eslingador)",
+  ],
+  "Carga Terrestre": [
+    "Semirremolque","Chasis","Camioneta Pick Up",
+    "Semirremolque con hidrogrúa","Chasis con hidrogrúa",
+    "Carretón 2,6 mts","Carretón 3 mts","Carretón 3,2 mts","Carretón con rampa","Carretón deprimido","Carretón con malacate",
+    "Camión Petrolero","Transporte en envío consolidado",
+  ],
+  "Mantenimiento de Caminos": [
+    "Motoniveladora","Camión Regador 10 m3","Camión Regador 20 m3","Camión Regador 30 m3",
+    "Retroexcavadora","Retro Pala","Pala Cargadora","Vibrocompactador",
+    "Camión Volcador","Camión Batea","Topador",
+    "Excavadora","Excavadora sobre orugas","Mini Retroexcavadora",
+    "Cuadrilla ATG / Operarios Civiles",
+  ],
+  "Cargas Líquidas": [
+    "Cisterna 35 m3 x 24 hs","Chupa 35m3 x 24 hs","Chupa 9m3 x 24 hs","Vactor 16m3 x 24 hs","Vactor 30 m3 x 24 hs",
+    "Cisterna 35 m3 x 12 hs","Chupa 35m3 x 12 hs","Chupa 9m3 x 12 hs","Vactor 16m3 x 12 hs","Vactor 30 m3 x 12 hs",
+    "Cisterna de agua dulce x 24 hs","Cisterna de agua dulce x 12 hs",
+  ],
+  "Transporte de Agua y Efluentes": [
+    "Cisterna de agua 10 m3","Cisterna de agua 20 m3","Cisterna de agua 30 m3",
+    "Evacuador 10 m3","Evacuador 30 m3",
+  ],
+  "Provisión de GasOil": [
+    "Cisterna de gasoil 35 m3","Cisterna de gasoil 17 m3","Chanchita de reparto",
+  ],
+  "Servicios en Locación": [
+    "Camión Portacontenedores","Camión Porta doble","Camión Porta doble con acoplado",
+    "Camión Vactor 16 m3","Camión Vactor 30 m3",
+    "Cuadrilla de hidrolavado","Ayudante Tareas Generales (ATG)","Mini Retroexcavadora",
+    "Hidrolavadora con caldera","Cuadrilla de operarios civiles","Cuadrilla de espacios confinados",
+  ],
 };
 const estadoColor    = {Pendiente:"#f59e0b","En Proceso":P314,Completado:"#10b981",Cancelado:"#6b7280"};
-const servicioIcon   = {Izajes:"🏗️","Carga Terrestre":"🚛","Mantenimiento de Caminos":"🛤️","Cargas Líquidas":"🛢️","Transporte de Agua":"💧","Provisión de GasOil":"⛽"};
+const servicioIcon   = {Izajes:"🏗️","Carga Terrestre":"🚛","Mantenimiento de Caminos":"🛤️","Cargas Líquidas":"🛢️","Transporte de Agua y Efluentes":"💧","Provisión de GasOil":"⛽","Servicios en Locación":"🔧"};
 const prioridadColor = {Baja:"#10b981",Media:"#f59e0b",Alta:"#ef4444",Urgente:"#7c3aed"};
 
 const emptyRecurso  = ()=>({equipo:"",custom:"",cantidad:1});
@@ -273,12 +303,13 @@ const ABREV_LOCACION = {
   "Rio Colorado":    "RCo",
 };
 const ABREV_SERVICIO = {
-  "Izajes":                  "Izajes",
-  "Carga Terrestre":         "C. Terrestre",
-  "Mantenimiento de Caminos":"Caminos",
-  "Cargas Líquidas":         "C. Líquidas",
-  "Transporte de Agua":      "Agua",
-  "Provisión de GasOil":     "Gasoil",
+  "Izajes":                       "Izajes",
+  "Carga Terrestre":              "C. Terrestre",
+  "Mantenimiento de Caminos":     "Caminos",
+  "Cargas Líquidas":              "C. Líquidas",
+  "Transporte de Agua y Efluentes":"Agua/Eflu.",
+  "Provisión de GasOil":          "Gasoil",
+  "Servicios en Locación":        "Locación",
 };
 
 
