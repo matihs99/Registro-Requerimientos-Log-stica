@@ -29,7 +29,8 @@
     @keyframes spin{to{transform:rotate(360deg)}}
     @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
     .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-    @media(max-width:520px){.grid-2{grid-template-columns:1fr}}
+    .grid-3-2{display:grid;grid-template-columns:3fr 2fr;gap:16px}
+    @media(max-width:520px){.grid-2{grid-template-columns:1fr}.grid-3-2{grid-template-columns:1fr}}
   </style>
 </head>
 <body>
@@ -484,18 +485,18 @@ function MetricasView({reqs,onBack,online,pendingWrites}){
           <KPICard label="% Completados" value={`${pctCompletado}%`} color="#10b981" icon="📊" sub={`${completados} de ${total}`}/>
           <KPICard label="Días prom. a programar" value={avgAsig!==null?`${avgAsig}d`:"—"} color={P314} icon="⏱️" sub="creación → fecha programada" tramos={avgAsig!==null?tramos:null}/>
         </div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
+        <div className="grid-2" style={{gap:16,marginBottom:16}}>
           <Card title="📦 Por Tipo de Servicio"><BarChart data={porServicio} color={i=>sColors[i%sColors.length]} height={150}/></Card>
           <Card title="📍 Por Locación"><BarChart data={porLocacion} color={P314} height={150}/></Card>
         </div>
-        <div style={{display:"grid",gridTemplateColumns:"3fr 2fr",gap:16,marginBottom:16}}>
+        <div className="grid-3-2" style={{marginBottom:16}}>
           <Card title="📈 Evolución Semanal (últimas 8 semanas)"><BarChart data={semanas} color={P303} height={150}/></Card>
           <Card title="💰 Top Imputaciones de Costo">
             {topImput.length===0?<div style={{color:"#9ca3af",fontSize:13,textAlign:"center",padding:"20px 0"}}>Sin datos en el período</div>
             :topImput.map(([imp,cnt])=><HBar key={imp} label={imp} value={cnt} max={maxImput}/>)}
           </Card>
         </div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
+        <div className="grid-2" style={{gap:16,marginBottom:16}}>
           <Card title="🎯 Distribución por Prioridad">
             <BarChart data={PRIORIDADES.map(p=>({label:p,value:filtrados.filter(r=>r.prioridad===p).length}))} color={i=>Object.values(prioridadColor)[i]} height={130}/>
           </Card>
