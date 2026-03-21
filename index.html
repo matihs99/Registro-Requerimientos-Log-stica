@@ -547,7 +547,7 @@ function App(){
   const submitReq=async()=>{
     const e=validate();if(Object.keys(e).length){setErrors(e);return;}
     setEnviando(true);
-    try{const safe=sanitizeReq(newReq);const docRef=await db.collection(COL).add({...safe,id:"",estado:"Pendiente",fechaCreacion:new Date().toISOString().split("T")[0],recursosAsignados:[],fechaProgramada:"",archivos:[],reprogramaciones:0,_ts:Date.now()});setLastDocId(docRef.id);setSubmitted(true);}
+    try{const safe=sanitizeReq(newReq);console.log('Enviando requerimiento:',JSON.stringify(safe));const docRef=await db.collection(COL).add({...safe,id:"",estado:"Pendiente",fechaCreacion:new Date().toISOString().split("T")[0],recursosAsignados:[],fechaProgramada:"",archivos:[],reprogramaciones:0,_ts:Date.now()});console.log('Requerimiento creado:',docRef.id);setLastDocId(docRef.id);setSubmitted(true);}
     catch(err){console.error('Error al enviar requerimiento:',err);alert('Error al enviar el requerimiento. Por favor intentá de nuevo.');}
     finally{setEnviando(false);}
   };
