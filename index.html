@@ -543,7 +543,7 @@ function App(){
     return(!filtroS||r.servicio===filtroS)&&(!filtroE||r.estado===filtroE)&&(!q||(r.id||"").toLowerCase().includes(q)||(r.area||"").toLowerCase().includes(q)||(r.locacion||"").toLowerCase().includes(q));
   });
 
-  const validate=()=>{const e={};if(!newReq.area.trim())e.area=true;if(!newReq.locacion)e.locacion=true;if(!newReq.servicio)e.servicio=true;if(!newReq.fechaRequerida)e.fechaRequerida=true;if(!newReq.imputacionCosto.trim())e.imputacionCosto=true;if(newReq.emailSolicitante&&!isValidEmail(newReq.emailSolicitante))e.emailSolicitante=true;return e;};
+  const validate=()=>{const e={};if(!newReq.area.trim())e.area=true;if(!newReq.locacion)e.locacion=true;if(!newReq.servicio)e.servicio=true;if(!newReq.fechaRequerida)e.fechaRequerida=true;if(!newReq.imputacionCosto.trim())e.imputacionCosto=true;if(newReq.emailSolicitante&&!isValidEmail(newReq.emailSolicitante))e.emailSolicitante=true;if(!newReq.contactos[0]?.nombre?.trim())e.contactoNombre=true;if(!newReq.contactos[0]?.telefono?.trim())e.contactoTelefono=true;return e;};
 
   const [submitError,setSubmitError]=useState("");
   const submitReq=async()=>{
@@ -563,7 +563,14 @@ function App(){
 
   const abrirAsignar=req=>{setAsignando(req);setAsignForm({id:req.id||"",recursosAsignados:req.recursosAsignados?.length?req.recursosAsignados.map(r=>({...r})):[emptyAsignado()],fechaProgramada:req.fechaProgramada||""});};
 
+  const [asignErrors,setAsignErrors]=useState({});
   const guardarAsignacion=async()=>{
+    const ae={};
+    if(!asignForm.id.trim())ae.id=true;
+    if(!asignForm.recursosAsignados.some(r=>r.equipo))ae.recurso=true;
+    if(!asignForm.fechaProgramada)ae.fecha=true;
+    if(Object.keys(ae).length){setAsignErrors(ae);return;}
+    setAsignErrors({});
     const safeId=sanitize(asignForm.id);
     const safeRecursos=asignForm.recursosAsignados.map(r=>({...r,custom:sanitize(r.custom||''),proveedor:sanitize(r.proveedor||''),responsable:sanitize(r.responsable||'')}));
     const esNuevoId=safeId&&safeId!==asignando.id;
@@ -690,7 +697,10 @@ function App(){
                 <RecursosEditor recursos={newReq.recursosSolicitados} onChange={v=>setNewReq(p=>({...p,recursosSolicitados:v}))} servicio={newReq.servicio} asignacion={false}/>
               </Seccion>
             )}
-            <Seccion titulo="👤 Personas de Contacto"><PersonasEditor personas={newReq.contactos} onChange={v=>setNewReq(p=>({...p,contactos:v}))} titulo="contacto"/></Seccion>
+            <Seccion titulo="👤 Personas de Contacto *">
+              <PersonasEditor personas={newReq.contactos} onChange={v=>{setNewReq(p=>({...p,contactos:v}));setErrors(p=>({...p,contactoNombre:false,contactoTelefono:false}));}} titulo="contacto"/>
+              {(errors.contactoNombre||errors.contactoTelefono)&&<span style={S.err}>{errors.contactoNombre&&errors.contactoTelefono?"Nombre y teléfono del contacto son requeridos":errors.contactoNombre?"Nombre del contacto es requerido":"Teléfono del contacto es requerido"}</span>}
+            </Seccion>
             <Seccion titulo="📄 Responsables del Permiso de Trabajo"><PersonasEditor personas={newReq.responsablesPermiso} onChange={v=>setNewReq(p=>({...p,responsablesPermiso:v}))} titulo="responsable"/></Seccion>
             <Seccion titulo="💰 Imputación del Costo *">
               <input style={S.input(errors.imputacionCosto)} value={newReq.imputacionCosto} onChange={e=>{setNewReq(p=>({...p,imputacionCosto:e.target.value}));setErrors(p=>({...p,imputacionCosto:false}));}} placeholder="Ej: CC-1234 / OT-5678 / Proyecto Norte..."/>
@@ -802,8 +812,9 @@ function App(){
               {asignando.emailSolicitante&&<span style={{color:P303}}>✉️ {asignando.emailSolicitante}</span>}
             </div>
             <div style={{marginBottom:14}}>
-              <label style={S.label}>N° / ID de Solicitud</label>
-              <input style={S.input()} value={asignForm.id} onChange={e=>setAsignForm(p=>({...p,id:e.target.value}))} placeholder="Ej: SOL-001, OT-2345..."/>
+              <label style={S.label}>N° / ID de Solicitud *</label>
+              <input style={S.input(asignErrors.id)} value={asignForm.id} onChange={e=>{setAsignForm(p=>({...p,id:e.target.value}));setAsignErrors(p=>({...p,id:false}));}} placeholder="Ej: SOL-001, OT-2345..."/>
+              {asignErrors.id&&<span style={S.err}>Campo requerido</span>}
               {asignando.emailSolicitante&&asignForm.id&&asignForm.id!==asignando.id&&<span style={{fontSize:11,color:"#10b981",marginTop:3,display:"block"}}>📧 Se enviará email a {asignando.emailSolicitante} al guardar</span>}
             </div>
 
@@ -847,12 +858,14 @@ function App(){
               {(asignando.recursosSolicitados||[]).map((rs,i)=><div key={i} style={{fontSize:13,color:"#78350f",marginBottom:4}}>🔸 <strong>{rs.equipo==="__custom__"?rs.custom:rs.equipo}</strong> ×{rs.cantidad}</div>)}
             </div>
 
-            <div style={{fontWeight:700,color:P303,fontSize:14,marginBottom:10}}>⚙️ Recursos a Asignar</div>
-            <RecursosEditor recursos={asignForm.recursosAsignados} onChange={v=>setAsignForm(p=>({...p,recursosAsignados:v}))} servicio={asignando.servicio} asignacion={true}/>
+            <div style={{fontWeight:700,color:P303,fontSize:14,marginBottom:10}}>⚙️ Recursos a Asignar *</div>
+            <RecursosEditor recursos={asignForm.recursosAsignados} onChange={v=>{setAsignForm(p=>({...p,recursosAsignados:v}));setAsignErrors(p=>({...p,recurso:false}));}} servicio={asignando.servicio} asignacion={true}/>
+            {asignErrors.recurso&&<span style={S.err}>Debe asignar al menos un recurso</span>}
 
             <div style={{marginTop:14}}>
-              <label style={S.label}>Fecha y Hora Programada</label>
-              <input type="datetime-local" style={S.input()} value={asignForm.fechaProgramada} onChange={e=>setAsignForm(p=>({...p,fechaProgramada:e.target.value}))}/>
+              <label style={S.label}>Fecha y Hora Programada *</label>
+              <input type="datetime-local" style={S.input(asignErrors.fecha)} value={asignForm.fechaProgramada} onChange={e=>{setAsignForm(p=>({...p,fechaProgramada:e.target.value}));setAsignErrors(p=>({...p,fecha:false}));}}/>
+              {asignErrors.fecha&&<span style={S.err}>Campo requerido</span>}
             </div>
             <div style={{marginTop:16}}>
               <div style={{fontWeight:700,color:P303,fontSize:14,marginBottom:10}}>📎 Archivos Adjuntos</div>
