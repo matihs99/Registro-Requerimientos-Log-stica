@@ -663,7 +663,7 @@ function App(){
                   {errors.servicio&&<span style={S.err}>Campo requerido</span>}
                 </div>
                 <div style={S.field}><label style={S.label}>Fecha Requerida *</label>
-                  <input type="date" style={S.input(errors.fechaRequerida)} value={newReq.fechaRequerida} onChange={e=>{setNewReq(p=>({...p,fechaRequerida:e.target.value}));setErrors(p=>({...p,fechaRequerida:false}));}}/>
+                  <input type="date" style={S.input(errors.fechaRequerida)} value={newReq.fechaRequerida} onChange={e=>{const v=e.target.value;const diff=(new Date(v)-new Date(new Date().toISOString().split('T')[0]))/(86400000);setNewReq(p=>({...p,fechaRequerida:v,...(diff<2&&diff>=0?{prioridad:"Urgente"}:{})}));setErrors(p=>({...p,fechaRequerida:false}));}}/>
                   {errors.fechaRequerida&&<span style={S.err}>Campo requerido</span>}
                 </div>
               </div>
