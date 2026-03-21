@@ -542,7 +542,7 @@ function App(){
     return(!filtroS||r.servicio===filtroS)&&(!filtroE||r.estado===filtroE)&&(!q||(r.id||"").toLowerCase().includes(q)||(r.area||"").toLowerCase().includes(q)||(r.locacion||"").toLowerCase().includes(q));
   });
 
-  const validate=()=>{const e={};if(!newReq.area.trim())e.area=true;if(!newReq.locacion)e.locacion=true;if(!newReq.servicio)e.servicio=true;if(!newReq.fechaRequerida)e.fechaRequerida=true;if(!newReq.imputacionCosto.trim())e.imputacionCosto=true;if(newReq.emailSolicitante&&!isValidEmail(newReq.emailSolicitante))e.emailSolicitante=true;if(newReq.servicio&&!SERVICIOS.includes(newReq.servicio))e.servicio=true;if(newReq.locacion&&!LOCACIONES.includes(newReq.locacion))e.locacion=true;if(newReq.prioridad&&!PRIORIDADES.includes(newReq.prioridad))e.prioridad=true;return e;};
+  const validate=()=>{const e={};if(!newReq.area.trim())e.area=true;if(!newReq.locacion)e.locacion=true;if(!newReq.servicio)e.servicio=true;if(!newReq.fechaRequerida)e.fechaRequerida=true;if(!newReq.imputacionCosto.trim())e.imputacionCosto=true;if(newReq.emailSolicitante&&!isValidEmail(newReq.emailSolicitante))e.emailSolicitante=true;return e;};
 
   const submitReq=async()=>{
     const e=validate();if(Object.keys(e).length){setErrors(e);return;}
