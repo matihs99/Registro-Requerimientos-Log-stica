@@ -6,17 +6,20 @@
   <title>Sistema de Requerimientos Logísticos</title>
   <link rel="manifest" href="./manifest.json"/>
   <meta name="theme-color" content="#002B45"/>
+  <meta name="referrer" content="strict-origin-when-cross-origin"/>
+  <meta http-equiv="X-Content-Type-Options" content="nosniff"/>
   <meta name="apple-mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-title" content="Req. Logísticos"/>
   <link rel="apple-touch-icon" href="./icon.svg"/>
-  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-storage-compat.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+  <!-- CDN Scripts — TODO: agregar integrity="sha384-..." crossorigin="anonymous" cuando se verifiquen los hashes -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js" crossorigin="anonymous"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js" crossorigin="anonymous"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-storage-compat.js" crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js" crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js" crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js" crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js" crossorigin="anonymous"></script>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:system-ui,sans-serif;background:#f1f5f9;-webkit-tap-highlight-color:transparent}
@@ -55,6 +58,35 @@
 <script type="text/babel">
 const {useState,useEffect,useRef} = React;
 const COL = 'requerimientos';
+
+// ── Seguridad: sanitización de inputs ────────────────────────────────────
+function sanitize(str){
+  if(typeof str!=='string')return '';
+  return str.replace(/[<>]/g,'').trim();
+}
+function isValidEmail(email){
+  if(!email)return true; // campo opcional
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)&&email.length<=254;
+}
+function sanitizeReq(req){
+  return {
+    ...req,
+    area:sanitize(req.area),
+    locacion:sanitize(req.locacion),
+    emailSolicitante:sanitize(req.emailSolicitante),
+    observaciones:sanitize(req.observaciones),
+    imputacionCosto:sanitize(req.imputacionCosto),
+    origen:sanitize(req.origen),
+    destino:sanitize(req.destino),
+    pesoDimensionesCarga:sanitize(req.pesoDimensionesCarga),
+    pesoEquipoIzar:sanitize(req.pesoEquipoIzar),
+    dimensionesEquipoIzar:sanitize(req.dimensionesEquipoIzar),
+    distanciaEquipo:sanitize(req.distanciaEquipo),
+    contactos:(req.contactos||[]).map(c=>({nombre:sanitize(c.nombre),telefono:sanitize(c.telefono)})),
+    responsablesPermiso:(req.responsablesPermiso||[]).map(r=>({nombre:sanitize(r.nombre),telefono:sanitize(r.telefono)})),
+    recursosSolicitados:(req.recursosSolicitados||[]).map(r=>({...r,custom:sanitize(r.custom||'')})),
+  };
+}
 
 // ── Paleta corporativa ─────────────────────────────────────────────────────
 const P303  = "#002B45";  // PANTONE 303 C — azul marino oscuro
@@ -151,12 +183,18 @@ function Seccion({titulo,color=P303,children,defaultOpen=true}){
 function ArchivosAdjuntos({docId,archivos=[],editable=true}){
   const [uploading,setUploading]=useState(false);
   const inputRef=useRef();
+  const MAX_FILE_SIZE=10*1024*1024; // 10 MB
+  const ALLOWED_TYPES=['image/jpeg','image/png','image/webp','application/pdf','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','application/vnd.ms-excel','application/msword','application/vnd.openxmlformats-officedocument.wordprocessingml.document','text/plain'];
   const handleUpload=async(e)=>{
     const files=Array.from(e.target.files);
     if(!files.length)return;
+    const invalidSize=files.filter(f=>f.size>MAX_FILE_SIZE);
+    if(invalidSize.length){alert(`Archivos demasiado grandes (máx 10MB): ${invalidSize.map(f=>f.name).join(', ')}`);e.target.value='';return;}
+    const invalidType=files.filter(f=>!ALLOWED_TYPES.includes(f.type)&&!f.name.match(/\.(jpg|jpeg|png|webp|pdf|xlsx|xls|doc|docx|txt)$/i));
+    if(invalidType.length){alert(`Tipo de archivo no permitido: ${invalidType.map(f=>f.name).join(', ')}`);e.target.value='';return;}
     setUploading(true);
-    try{for(const file of files){const ref=storage.ref(`requerimientos/${docId}/${Date.now()}_${file.name}`);await ref.put(file);const url=await ref.getDownloadURL();await db.collection(COL).doc(docId).update({archivos:firebase.firestore.FieldValue.arrayUnion({nombre:file.name,url,fecha:new Date().toISOString().split('T')[0]})});}}
-    catch(e){console.error(e);}
+    try{for(const file of files){const safeName=file.name.replace(/[^a-zA-Z0-9._-]/g,'_');const ref=storage.ref(`requerimientos/${docId}/${Date.now()}_${safeName}`);await ref.put(file);const url=await ref.getDownloadURL();await db.collection(COL).doc(docId).update({archivos:firebase.firestore.FieldValue.arrayUnion({nombre:file.name,url,fecha:new Date().toISOString().split('T')[0]})});}}
+    catch(err){console.error('Error al subir archivo:',err);alert('Error al subir archivo. Intentá de nuevo.');}
     setUploading(false); e.target.value='';
   };
   return(
@@ -504,13 +542,13 @@ function App(){
     return(!filtroS||r.servicio===filtroS)&&(!filtroE||r.estado===filtroE)&&(!q||(r.id||"").toLowerCase().includes(q)||(r.area||"").toLowerCase().includes(q)||(r.locacion||"").toLowerCase().includes(q));
   });
 
-  const validate=()=>{const e={};if(!newReq.area.trim())e.area=true;if(!newReq.locacion)e.locacion=true;if(!newReq.servicio)e.servicio=true;if(!newReq.fechaRequerida)e.fechaRequerida=true;if(!newReq.imputacionCosto.trim())e.imputacionCosto=true;return e;};
+  const validate=()=>{const e={};if(!newReq.area.trim())e.area=true;if(!newReq.locacion)e.locacion=true;if(!newReq.servicio)e.servicio=true;if(!newReq.fechaRequerida)e.fechaRequerida=true;if(!newReq.imputacionCosto.trim())e.imputacionCosto=true;if(newReq.emailSolicitante&&!isValidEmail(newReq.emailSolicitante))e.emailSolicitante=true;if(newReq.servicio&&!SERVICIOS.includes(newReq.servicio))e.servicio=true;if(newReq.locacion&&!LOCACIONES.includes(newReq.locacion))e.locacion=true;if(newReq.prioridad&&!PRIORIDADES.includes(newReq.prioridad))e.prioridad=true;return e;};
 
   const submitReq=async()=>{
     const e=validate();if(Object.keys(e).length){setErrors(e);return;}
     setEnviando(true);
-    try{const docRef=await db.collection(COL).add({...newReq,id:"",estado:"Pendiente",fechaCreacion:new Date().toISOString().split("T")[0],recursosAsignados:[],fechaProgramada:"",archivos:[],reprogramaciones:0,_ts:Date.now()});setLastDocId(docRef.id);setSubmitted(true);}
-    catch(err){console.error(err);}
+    try{const safe=sanitizeReq(newReq);const docRef=await db.collection(COL).add({...safe,id:"",estado:"Pendiente",fechaCreacion:new Date().toISOString().split("T")[0],recursosAsignados:[],fechaProgramada:"",archivos:[],reprogramaciones:0,_ts:Date.now()});setLastDocId(docRef.id);setSubmitted(true);}
+    catch(err){console.error('Error al enviar requerimiento:',err);alert('Error al enviar el requerimiento. Por favor intentá de nuevo.');}
     finally{setEnviando(false);}
   };
 
@@ -519,9 +557,11 @@ function App(){
   const abrirAsignar=req=>{setAsignando(req);setAsignForm({id:req.id||"",recursosAsignados:req.recursosAsignados?.length?req.recursosAsignados.map(r=>({...r})):[emptyAsignado()],fechaProgramada:req.fechaProgramada||""});};
 
   const guardarAsignacion=async()=>{
-    const esNuevoId=asignForm.id&&asignForm.id!==asignando.id;
+    const safeId=sanitize(asignForm.id);
+    const safeRecursos=asignForm.recursosAsignados.map(r=>({...r,custom:sanitize(r.custom||''),proveedor:sanitize(r.proveedor||''),responsable:sanitize(r.responsable||'')}));
+    const esNuevoId=safeId&&safeId!==asignando.id;
     const esReprog=asignando.estado==="En Proceso";
-    const upd={id:asignForm.id,recursosAsignados:asignForm.recursosAsignados,fechaProgramada:asignForm.fechaProgramada,estado:asignForm.recursosAsignados.some(ra=>ra.equipo)?"En Proceso":asignando.estado};
+    const upd={id:safeId,recursosAsignados:safeRecursos,fechaProgramada:asignForm.fechaProgramada,estado:safeRecursos.some(ra=>ra.equipo)?"En Proceso":asignando.estado};
     if(esReprog) upd.reprogramaciones=firebase.firestore.FieldValue.increment(1);
     await db.collection(COL).doc(asignando._docId).update(upd);
     if(esNuevoId&&asignando.emailSolicitante&&EMAILJS_PUBLIC_KEY!=="TU_PUBLIC_KEY"){
@@ -604,8 +644,8 @@ function App(){
                 {errors.area&&<span style={S.err}>Campo requerido</span>}
               </div>
               <div style={S.field}><label style={S.label}>Email de contacto</label>
-                <input style={S.input()} value={newReq.emailSolicitante} onChange={e=>setNewReq(p=>({...p,emailSolicitante:e.target.value}))} placeholder="tu@email.com" type="email" inputMode="email"/>
-                <span style={{fontSize:11,color:"#9ca3af"}}>Para recibir el ID asignado y novedades del requerimiento</span>
+                <input style={S.input(errors.emailSolicitante)} value={newReq.emailSolicitante} onChange={e=>{setNewReq(p=>({...p,emailSolicitante:e.target.value}));setErrors(p=>({...p,emailSolicitante:false}));}} placeholder="tu@email.com" type="email" inputMode="email"/>
+                {errors.emailSolicitante?<span style={S.err}>Email inválido</span>:<span style={{fontSize:11,color:"#9ca3af"}}>Para recibir el ID asignado y novedades del requerimiento</span>}
               </div>
               <div style={S.field}><label style={S.label}>Locación *</label>
                 <select style={S.input(errors.locacion)} value={newReq.locacion} onChange={e=>{setNewReq(p=>({...p,locacion:e.target.value}));setErrors(p=>({...p,locacion:false}));}}>
