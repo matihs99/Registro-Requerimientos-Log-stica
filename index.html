@@ -544,11 +544,17 @@ function App(){
 
   const validate=()=>{const e={};if(!newReq.area.trim())e.area=true;if(!newReq.locacion)e.locacion=true;if(!newReq.servicio)e.servicio=true;if(!newReq.fechaRequerida)e.fechaRequerida=true;if(!newReq.imputacionCosto.trim())e.imputacionCosto=true;if(newReq.emailSolicitante&&!isValidEmail(newReq.emailSolicitante))e.emailSolicitante=true;return e;};
 
+  const [submitError,setSubmitError]=useState("");
   const submitReq=async()=>{
+    setSubmitError("");
     const e=validate();if(Object.keys(e).length){setErrors(e);return;}
     setEnviando(true);
-    try{const safe=sanitizeReq(newReq);console.log('Enviando requerimiento:',JSON.stringify(safe));const docRef=await db.collection(COL).add({...safe,id:"",estado:"Pendiente",fechaCreacion:new Date().toISOString().split("T")[0],recursosAsignados:[],fechaProgramada:"",archivos:[],reprogramaciones:0,_ts:Date.now()});console.log('Requerimiento creado:',docRef.id);setLastDocId(docRef.id);setSubmitted(true);}
-    catch(err){console.error('Error al enviar requerimiento:',err);alert('Error al enviar el requerimiento. Por favor intentá de nuevo.');}
+    try{
+      const safe=sanitizeReq(newReq);
+      const docRef=await db.collection(COL).add({...safe,id:"",estado:"Pendiente",fechaCreacion:new Date().toISOString().split("T")[0],recursosAsignados:[],fechaProgramada:"",archivos:[],reprogramaciones:0,_ts:Date.now()});
+      setLastDocId(docRef.id);setSubmitted(true);
+    }
+    catch(err){console.error('Error al enviar:',err);setSubmitError(err.message||'Error desconocido al enviar');}
     finally{setEnviando(false);}
   };
 
@@ -692,6 +698,7 @@ function App(){
             <Seccion titulo="📝 Observaciones">
               <textarea style={{...S.input(),height:90,resize:"vertical"}} value={newReq.observaciones} onChange={e=>setNewReq(p=>({...p,observaciones:e.target.value}))} placeholder="Información adicional relevante..."/>
             </Seccion>
+            {submitError&&<div style={{background:"#fef2f2",border:"1px solid #fecaca",borderRadius:10,padding:"12px 16px",color:"#dc2626",fontSize:14,fontWeight:600,marginBottom:8}}>⚠️ Error: {submitError}</div>}
             <button onClick={submitReq} disabled={enviando}
               style={{background:enviando?"#6abecc":P303,color:"#fff",border:"none",borderRadius:12,padding:"16px",fontWeight:700,fontSize:17,cursor:enviando?"not-allowed":"pointer",transition:"background .2s",display:"flex",alignItems:"center",justifyContent:"center",gap:10,touchAction:"manipulation",marginTop:4}}>
               {enviando?<><span style={{display:"inline-block",width:18,height:18,border:"2.5px solid #fff",borderTopColor:"transparent",borderRadius:"50%",animation:"spin .7s linear infinite"}}/> Enviando...</>:"Enviar Requerimiento →"}
