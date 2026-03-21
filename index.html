@@ -29,7 +29,8 @@
     @keyframes spin{to{transform:rotate(360deg)}}
     @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
     .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-    @media(max-width:520px){.grid-2{grid-template-columns:1fr}}
+    .grid-3-2{display:grid;grid-template-columns:3fr 2fr;gap:16px}
+    @media(max-width:520px){.grid-2{grid-template-columns:1fr}.grid-3-2{grid-template-columns:1fr}}
   </style>
 </head>
 <body>
@@ -382,9 +383,9 @@ function KPICard({label,value,sub,color,icon,alert,tramos}){
 }
 function BarChart({data,color=P314,height=130}){
   const max=Math.max(...data.map(d=>d.value),1);
-  return(<div style={{display:"flex",alignItems:"flex-end",gap:6,height,padding:"0 4px"}}>
+  return(<div style={{display:"flex",alignItems:"stretch",gap:6,height,padding:"0 4px"}}>
     {data.map((d,i)=>(
-      <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:3,minWidth:0}}>
+      <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"flex-end",gap:3,minWidth:0}}>
         <span style={{fontSize:11,fontWeight:700,color:"#374151"}}>{d.value||""}</span>
         <div style={{width:"100%",background:typeof color==="function"?color(i):color,borderRadius:"4px 4px 0 0",height:`${(d.value/max)*75}%`,minHeight:d.value?3:0,transition:"height .4s"}}/>
         <span style={{fontSize:10,color:"#9ca3af",textAlign:"center",lineHeight:1.2,width:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.label}</span>
@@ -484,18 +485,18 @@ function MetricasView({reqs,onBack,online,pendingWrites}){
           <KPICard label="% Completados" value={`${pctCompletado}%`} color="#10b981" icon="📊" sub={`${completados} de ${total}`}/>
           <KPICard label="Días prom. a programar" value={avgAsig!==null?`${avgAsig}d`:"—"} color={P314} icon="⏱️" sub="creación → fecha programada" tramos={avgAsig!==null?tramos:null}/>
         </div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
+        <div className="grid-2" style={{gap:16,marginBottom:16}}>
           <Card title="📦 Por Tipo de Servicio"><BarChart data={porServicio} color={i=>sColors[i%sColors.length]} height={150}/></Card>
           <Card title="📍 Por Locación"><BarChart data={porLocacion} color={P314} height={150}/></Card>
         </div>
-        <div style={{display:"grid",gridTemplateColumns:"3fr 2fr",gap:16,marginBottom:16}}>
+        <div className="grid-3-2" style={{marginBottom:16}}>
           <Card title="📈 Evolución Semanal (últimas 8 semanas)"><BarChart data={semanas} color={P303} height={150}/></Card>
           <Card title="💰 Top Imputaciones de Costo">
             {topImput.length===0?<div style={{color:"#9ca3af",fontSize:13,textAlign:"center",padding:"20px 0"}}>Sin datos en el período</div>
             :topImput.map(([imp,cnt])=><HBar key={imp} label={imp} value={cnt} max={maxImput}/>)}
           </Card>
         </div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
+        <div className="grid-2" style={{gap:16,marginBottom:16}}>
           <Card title="🎯 Distribución por Prioridad">
             <BarChart data={PRIORIDADES.map(p=>({label:p,value:filtrados.filter(r=>r.prioridad===p).length}))} color={i=>Object.values(prioridadColor)[i]} height={130}/>
           </Card>
