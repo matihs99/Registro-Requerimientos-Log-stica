@@ -16,13 +16,24 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.7.0/jspdf.plugin.autotable.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:system-ui,sans-serif;background:#f1f5f9;-webkit-tap-highlight-color:transparent}
     input,select,textarea,button{font-family:inherit;font-size:16px}
-    ::-webkit-scrollbar{width:4px;height:4px}
-    ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:99px}
+    ::-webkit-scrollbar{width:10px;height:10px}
+    ::-webkit-scrollbar-track{background:#eef2f6;border-radius:99px}
+    ::-webkit-scrollbar-thumb{background:#94a3b8;border-radius:99px;border:2px solid #eef2f6}
+    ::-webkit-scrollbar-thumb:hover{background:#64748b}
+    /* Scroll horizontal de tabla: más grueso y SIEMPRE visible */
+    .tbl-scroll{overflow-x:scroll !important;overflow-y:hidden;-webkit-overflow-scrolling:touch;scrollbar-gutter:stable;scrollbar-width:auto;scrollbar-color:#0096B2 #e6f4f8}
+    .tbl-scroll::-webkit-scrollbar{height:14px;-webkit-appearance:none}
+    .tbl-scroll::-webkit-scrollbar-track{background:#e6f4f8;border-radius:99px;margin:0 6px}
+    .tbl-scroll::-webkit-scrollbar-thumb{background:#0096B2;border-radius:99px;border:3px solid #e6f4f8;min-width:40px}
+    .tbl-scroll::-webkit-scrollbar-thumb:hover{background:#007a93}
+    .tbl-scroll::-webkit-scrollbar-thumb:active{background:#002B45}
     @keyframes spin{to{transform:rotate(360deg)}}
     @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
     .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
@@ -35,7 +46,6 @@
   const EMAILJS_PUBLIC_KEY  = "TU_PUBLIC_KEY";
   const EMAILJS_SERVICE_ID  = "TU_SERVICE_ID";
   const EMAILJS_TEMPLATE_ID = "TU_TEMPLATE_ID";
-
   firebase.initializeApp({
     apiKey:"AIzaSyC1nDCKYVu5NLm4ofpRyYs4eaE-LN88QNI",
     authDomain:"requerimientos-logisticos.firebaseapp.com",
@@ -51,33 +61,69 @@
   if('serviceWorker' in navigator)
     window.addEventListener('load',()=>navigator.serviceWorker.register('./service-worker.js').catch(()=>{}));
 </script>
-
 <script type="text/babel">
 const {useState,useEffect,useRef} = React;
 const COL = 'requerimientos';
-
-// ── Paleta corporativa ─────────────────────────────────────────────────────
-const P303  = "#002B45";  // PANTONE 303 C — azul marino oscuro
-const P314  = "#0096B2";  // PANTONE 314 C — teal
+const P303  = "#002B45";
+const P314  = "#0096B2";
 const GRAD  = `linear-gradient(90deg,${P303},${P314})`;
 const GRAD2 = `linear-gradient(135deg,${P303},${P314})`;
-
-const SERVICIOS   = ["Izajes","Carga Terrestre","Mantenimiento de Caminos","Cargas Líquidas","Transporte de Agua","Provisión de GasOil"];
+const SERVICIOS   = ["Izajes","Carga Terrestre","Mantenimiento de Caminos","Cargas Líquidas","Transporte de Agua y Efluentes","Provisión de GasOil","Servicios en Locación"];
 const ESTADOS     = ["Pendiente","En Proceso","Completado","Cancelado"];
 const PRIORIDADES = ["Baja","Media","Alta","Urgente"];
 const LOCACIONES  = ["La Calera","Bajo del Choique","Rio Colorado"];
+const MONEDAS     = ["USD","ARS"];
+// SLA en días de tolerancia según prioridad (fechaFinReal <= fechaRequerida + tolerancia)
+const SLA_TOLERANCIA = {Urgente:0, Alta:1, Media:3, Baja:7};
+const MOTIVOS_CANCELACION = ["Requerimiento duplicado","Cambio de alcance","Problema HSE","Falta de recursos","Problema presupuestario","No es necesario","Reprogramado como nuevo requerimiento","Otro"];
+const EVENTOS_HSE = ["Near-miss","Incidente menor","Incidente reportable","Desvío de procedimiento","Hallazgo HSE","Sin eventos"];
 const EQUIPOS_POR_SERVICIO = {
-  "Izajes":                  ["Grúa 25T","Grúa 50T","Grúa 70T","Grúa 130T","Hidrogrúa"],
-  "Carga Terrestre":         ["Semirremolque","Hidrogrúa","Cama Baja","Furgón","Playo"],
-  "Mantenimiento de Caminos":["Motoniveladora","Pala Cargadora","Camión Regador","Camión Volcador","Camión de Riego"],
-  "Cargas Líquidas":         ["Camión Cisterna"],
-  "Transporte de Agua":      ["Cisterna 10m3","Cisterna 35m3"],
-  "Provisión de GasOil":     [],
+  "Izajes": [
+    "Hidrogrúa 5 TN","Hidrogrúa 7,5 TN","Hidrogrúa 12 TN",
+    "Grúa 60 TN","Grúa 70 TN","Grúa 80 TN","Grúa 90 TN","Grúa 100 TN","Grúa 130 TN","Grúa 160 TN","Grúa 220 TN",
+    "Manlift","Forklift (Manipulador)","Operador Manlift","Cuadrilla de izaje (señalero + eslingador)",
+  ],
+  "Carga Terrestre": [
+    "Semirremolque","Chasis","Camioneta Pick Up",
+    "Semirremolque con hidrogrúa","Chasis con hidrogrúa",
+    "Carretón 2,6 mts","Carretón 3 mts","Carretón 3,2 mts","Carretón con rampa","Carretón deprimido","Carretón con malacate",
+    "Camión Petrolero","Transporte en envío consolidado",
+  ],
+  "Mantenimiento de Caminos": [
+    "Motoniveladora","Camión Regador 10 m3","Camión Regador 20 m3","Camión Regador 30 m3",
+    "Retroexcavadora","Retro Pala","Pala Cargadora","Vibrocompactador",
+    "Camión Volcador","Camión Batea","Topador",
+    "Excavadora","Excavadora sobre orugas","Mini Retroexcavadora",
+    "Cuadrilla ATG / Operarios Civiles",
+  ],
+  "Cargas Líquidas": [
+    "Cisterna 35 m3 x 24 hs","Chupa 35m3 x 24 hs","Chupa 9m3 x 24 hs","Vactor 16m3 x 24 hs","Vactor 30 m3 x 24 hs",
+    "Cisterna 35 m3 x 12 hs","Chupa 35m3 x 12 hs","Chupa 9m3 x 12 hs","Vactor 16m3 x 12 hs","Vactor 30 m3 x 12 hs",
+    "Cisterna de agua dulce x 24 hs","Cisterna de agua dulce x 12 hs",
+  ],
+  "Transporte de Agua y Efluentes": [
+    "Cisterna de agua 10 m3","Cisterna de agua 20 m3","Cisterna de agua 30 m3",
+    "Evacuador 10 m3","Evacuador 30 m3",
+  ],
+  "Provisión de GasOil": [
+    "Cisterna de gasoil 35 m3","Cisterna de gasoil 17 m3","Chanchita de reparto",
+  ],
+  "Servicios en Locación": [
+    "Camión Portacontenedores","Camión Porta doble","Camión Porta doble con acoplado",
+    "Camión Vactor 16 m3","Camión Vactor 30 m3",
+    "Cuadrilla de hidrolavado","Ayudante Tareas Generales (ATG)","Mini Retroexcavadora",
+    "Hidrolavadora con caldera","Cuadrilla de operarios civiles","Cuadrilla de espacios confinados",
+  ],
 };
 const estadoColor    = {Pendiente:"#f59e0b","En Proceso":P314,Completado:"#10b981",Cancelado:"#6b7280"};
-const servicioIcon   = {Izajes:"🏗️","Carga Terrestre":"🚛","Mantenimiento de Caminos":"🛤️","Cargas Líquidas":"🛢️","Transporte de Agua":"💧","Provisión de GasOil":"⛽"};
+const servicioIcon   = {Izajes:"🏗️","Carga Terrestre":"🚛","Mantenimiento de Caminos":"🛤️","Cargas Líquidas":"🛢️","Transporte de Agua y Efluentes":"💧","Provisión de GasOil":"⛽","Servicios en Locación":"🚧"};
 const prioridadColor = {Baja:"#10b981",Media:"#f59e0b",Alta:"#ef4444",Urgente:"#7c3aed"};
-
+const ABREV_LOCACION = {"La Calera":"LCa","Bajo del Choique":"BdC","Rio Colorado":"RCo"};
+const ABREV_SERVICIO = {
+  "Izajes":"Izajes","Carga Terrestre":"C. Terrestre","Mantenimiento de Caminos":"Caminos",
+  "Cargas Líquidas":"C. Líquidas","Transporte de Agua y Efluentes":"Agua/Eflu.",
+  "Provisión de GasOil":"Gasoil","Servicios en Locación":"Locación",
+};
 const emptyRecurso  = ()=>({equipo:"",custom:"",cantidad:1});
 const emptyAsignado = ()=>({equipo:"",custom:"",cantidad:1,proveedor:"",responsable:""});
 const emptyPersona  = ()=>({nombre:"",telefono:""});
@@ -88,9 +134,13 @@ const emptyReq = ()=>({
   origen:"",contactoOrigen:{nombre:"",telefono:""},destino:"",contactoDestino:{nombre:"",telefono:""},
   pesoDimensionesCarga:"",pesoEquipoIzar:"",dimensionesEquipoIzar:"",distanciaEquipo:"",
   litrosGasOil:"",gradoGasOil:"",archivos:[],
+  // Campos financieros y SLA (nuevos)
+  costoEstimado:"", moneda:"USD", costoReal:"",
+  // Datos de cierre (nuevos)
+  fechaInicioReal:"", fechaFinReal:"", observacionesCierre:"", eventosHSE:[],
+  // Cancelación (nuevos)
+  motivoCancelacion:"", detalleCancelacion:"",
 });
-
-// ── Estilos base ───────────────────────────────────────────────────────────
 const S = {
   input:(err)=>({width:"100%",padding:"12px 14px",borderRadius:8,border:`1.5px solid ${err?"#ef4444":"#d1d5db"}`,fontSize:16,outline:"none",boxSizing:"border-box",background:"#fff",WebkitAppearance:"none"}),
   label:{fontSize:13,fontWeight:600,color:"#374151",marginBottom:5,display:"block"},
@@ -98,26 +148,62 @@ const S = {
   field:{display:"grid",gap:4},
 };
 
-// ── Componentes base ───────────────────────────────────────────────────────
+// ============== UTILIDADES (nuevas) ==============
+const parseNum = v => { if(v===""||v===null||v===undefined)return null; const n=Number(String(v).replace(/[^\d.-]/g,'')); return isNaN(n)?null:n; };
+const fmtMoneda = (v,m="USD") => { const n=parseNum(v); if(n===null)return "—"; return (m==="USD"?"US$ ":"$ ") + n.toLocaleString('es-AR',{minimumFractionDigits:0,maximumFractionDigits:0}); };
+const fmtNum0 = v => { const n=parseNum(v); return n===null?"—":n.toLocaleString('es-AR',{maximumFractionDigits:0}); };
+const diasEntre = (ini,fin) => { if(!ini||!fin)return null; const d1=new Date(ini.split('T')[0]||ini),d2=new Date(fin.split('T')[0]||fin); return Math.max(0,Math.round((d2-d1)/86400000)); };
+// SLA: devuelve "cumplido" | "incumplido" | "pendiente"
+function calcSLA(req){
+  if(!req.fechaRequerida) return "pendiente";
+  if(req.estado!=="Completado") return "pendiente";
+  if(!req.fechaFinReal) return "pendiente";
+  const tol = SLA_TOLERANCIA[req.prioridad] ?? 3;
+  const limite = new Date(req.fechaRequerida); limite.setDate(limite.getDate()+tol);
+  const fin = new Date(req.fechaFinReal.split('T')[0]);
+  return fin <= limite ? "cumplido" : "incumplido";
+}
+// Check de vencimiento pre-cierre
+function estaVencido(req){
+  if(!req.fechaRequerida) return false;
+  if(req.estado==="Completado"||req.estado==="Cancelado") return false;
+  const hoy=new Date().toISOString().split('T')[0];
+  const tol = SLA_TOLERANCIA[req.prioridad] ?? 3;
+  const limite = new Date(req.fechaRequerida); limite.setDate(limite.getDate()+tol);
+  return new Date(hoy) > limite;
+}
+function proximoAVencer(req){
+  if(!req.fechaRequerida) return false;
+  if(req.estado==="Completado"||req.estado==="Cancelado") return false;
+  const hoy=new Date();
+  const req_d = new Date(req.fechaRequerida);
+  const horas = (req_d - hoy)/3600000;
+  return horas >= 0 && horas <= 48;
+}
+// Desvío costo: (real - estimado) / estimado * 100
+function desvioCosto(req){
+  const e=parseNum(req.costoEstimado), r=parseNum(req.costoReal);
+  if(e===null||r===null||e===0) return null;
+  return (r-e)/e*100;
+}
+// Genera ID estándar: REQ-YYYY-NNNN (NNNN = count del año + 1)
+function generarIdAuto(reqs){
+  const year = new Date().getFullYear();
+  const prefix = `REQ-${year}-`;
+  const count = reqs.filter(r=>(r.id||"").startsWith(prefix)).length + 1;
+  return prefix + String(count).padStart(4,'0');
+}
 function Badge({color,text}){return <span style={{background:color+"22",color,border:`1px solid ${color}44`,borderRadius:6,padding:"2px 10px",fontSize:12,fontWeight:600,whiteSpace:"nowrap"}}>{text}</span>;}
 function StatCard({label,value,color,icon}){return(<div style={{background:"#fff",border:"1px solid #e5e7eb",borderRadius:10,padding:"14px 16px",flex:1,minWidth:110}}><div style={{fontSize:20}}>{icon}</div><div style={{fontSize:26,fontWeight:700,color}}>{value}</div><div style={{fontSize:12,color:"#6b7280",marginTop:2}}>{label}</div></div>);}
 function MiniBar({label,value,max,color}){return(<div style={{marginBottom:10}}><div style={{display:"flex",justifyContent:"space-between",fontSize:13,marginBottom:4}}><span>{label}</span><span style={{fontWeight:600}}>{value}</span></div><div style={{background:"#f3f4f6",borderRadius:99,height:7}}><div style={{background:color,borderRadius:99,height:7,width:`${max?(value/max)*100:0}%`,transition:"width .4s"}}/></div></div>);}
-
 function StatusBar({online,pendingWrites}){
-  const [bg,brd,color,msg]=online
-    ?pendingWrites
-      ?["#e6f4f8","#a0d4e2",P303,"⏳ Sincronizando..."]
-      :["#e6f4f8","#a0d4e2",P303,"🟢 En línea"]
-    :["#fef2f2","#fecaca","#991b1b","🔴 Sin conexión — datos guardados localmente"];
+  const [bg,brd,color,msg]=online?pendingWrites?["#e6f4f8","#a0d4e2",P303,"⏳ Sincronizando..."]:["#e6f4f8","#a0d4e2",P303,"🟢 En línea"]:["#fef2f2","#fecaca","#991b1b","🔴 Sin conexión — datos guardados localmente"];
   return <div style={{background:bg,borderBottom:`1px solid ${brd}`,padding:"6px 16px",fontSize:12,fontWeight:600,color,textAlign:"center"}}>{msg}</div>;
 }
-
 function Seccion({titulo,color=P303,children,defaultOpen=true}){
   const [open,setOpen]=useState(defaultOpen);
   return(<div style={{border:"1px solid #e5e7eb",borderRadius:10,overflow:"hidden"}}><div onClick={()=>setOpen(o=>!o)} style={{background:"#f8fafc",padding:"12px 16px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",userSelect:"none",WebkitUserSelect:"none"}}><span style={{fontWeight:700,fontSize:14,color}}>{titulo}</span><span style={{fontSize:11,color:"#9ca3af"}}>{open?"▲":"▼"}</span></div>{open&&<div style={{padding:"14px 16px",display:"grid",gap:14}}>{children}</div>}</div>);
 }
-
-// ── Archivos adjuntos ──────────────────────────────────────────────────────
 function ArchivosAdjuntos({docId,archivos=[],editable=true}){
   const [uploading,setUploading]=useState(false);
   const inputRef=useRef();
@@ -147,18 +233,257 @@ function ArchivosAdjuntos({docId,archivos=[],editable=true}){
     </div>
   );
 }
-
-// ── Exportación Excel ──────────────────────────────────────────────────────
 function exportExcel(reqs){
-  const data=reqs.map(r=>({'ID':r.id||'Sin ID','Fecha Creación':r.fechaCreacion||'','Área':r.area||'','Locación':r.locacion||'','Servicio':r.servicio||'','Fecha Requerida':r.fechaRequerida||'','Prioridad':r.prioridad||'','Estado':r.estado||'','Imputación':r.imputacionCosto||'','Recursos Solicitados':(r.recursosSolicitados||[]).map(rs=>`${rs.equipo==='__custom__'?rs.custom:rs.equipo} ×${rs.cantidad}`).join(' / ')||'','Recursos Asignados':(r.recursosAsignados||[]).filter(ra=>ra.equipo).map(ra=>`${ra.equipo==='__custom__'?ra.custom:ra.equipo} ×${ra.cantidad}`).join(' / ')||'','Proveedor':(r.recursosAsignados||[]).map(ra=>ra.proveedor).filter(Boolean).join(', ')||'','Responsable':(r.recursosAsignados||[]).map(ra=>ra.responsable).filter(Boolean).join(', ')||'','Fecha Programada':r.fechaProgramada||'','Reprogramaciones':r.reprogramaciones||0,'Observaciones':r.observaciones||''}));
+  const data=reqs.map(r=>{
+    const sla = calcSLA(r);
+    const ciclo = diasEntre(r.fechaCreacion, r.fechaFinReal);
+    const desvio = desvioCosto(r);
+    return {
+      'ID':r.id||'Sin ID','Fecha Creación':r.fechaCreacion||'','Área':r.area||'','Locación':r.locacion||'',
+      'Servicio':r.servicio||'','Fecha Requerida':r.fechaRequerida||'','Prioridad':r.prioridad||'','Estado':r.estado||'',
+      'Imputación':r.imputacionCosto||'',
+      'Costo Estimado':r.costoEstimado||'', 'Costo Real':r.costoReal||'', 'Moneda':r.moneda||'',
+      'Desvío %': desvio===null?'':desvio.toFixed(1),
+      'SLA': sla==='pendiente'?'':(sla==='cumplido'?'Cumplido':'Incumplido'),
+      'Tiempo Ciclo (días)': ciclo===null?'':ciclo,
+      'Fecha Inicio Real':r.fechaInicioReal||'', 'Fecha Fin Real':r.fechaFinReal||'',
+      'Eventos HSE':(r.eventosHSE||[]).join(' / ')||'',
+      'Recursos Solicitados':(r.recursosSolicitados||[]).map(rs=>`${rs.equipo==='__custom__'?rs.custom:rs.equipo} ×${rs.cantidad}`).join(' / ')||'',
+      'Recursos Asignados':(r.recursosAsignados||[]).filter(ra=>ra.equipo).map(ra=>`${ra.equipo==='__custom__'?ra.custom:ra.equipo} ×${ra.cantidad}`).join(' / ')||'',
+      'Proveedor':(r.recursosAsignados||[]).map(ra=>ra.proveedor).filter(Boolean).join(', ')||'',
+      'Responsable':(r.recursosAsignados||[]).map(ra=>ra.responsable).filter(Boolean).join(', ')||'',
+      'Fecha Programada':r.fechaProgramada||'','Reprogramaciones':r.reprogramaciones||0,
+      'Motivo Cancelación':r.motivoCancelacion||'','Detalle Cancelación':r.detalleCancelacion||'',
+      'Observaciones':r.observaciones||'', 'Observaciones Cierre':r.observacionesCierre||''
+    };
+  });
   const ws=XLSX.utils.json_to_sheet(data);
-  ws['!cols']=[10,14,22,18,25,14,10,14,18,35,35,22,22,18,12,35].map(w=>({wch:w}));
+  ws['!cols']=[12,13,20,16,22,13,9,13,18,13,13,8,8,10,13,13,13,22,30,30,22,22,18,10,20,28,32,32].map(w=>({wch:w}));
   const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,ws,'Requerimientos');
   XLSX.writeFile(wb,`requerimientos-${new Date().toISOString().split('T')[0]}.xlsx`);
 }
 
-// ── Editores dinámicos ─────────────────────────────────────────────────────
+// Exporta performance por proveedor en formato compatible con el Scorecard de Proveedores
+function exportScorecardJSON(reqs){
+  // Calcula métricas de performance por proveedor
+  const provs = {};
+  reqs.forEach(r=>{
+    (r.recursosAsignados||[]).forEach(ra=>{
+      if(!ra.proveedor) return;
+      const key = ra.proveedor;
+      if(!provs[key]) provs[key] = {proveedor:key, categoria:'', total:0, completados:0, cancelados:0, slaCumplido:0, slaTotal:0, reprog:0, hseEventos:0, costoTotal:0, incidenciasHSE:0};
+      const p = provs[key];
+      p.total++;
+      if(r.estado==='Completado') p.completados++;
+      if(r.estado==='Cancelado') p.cancelados++;
+      p.reprog += (r.reprogramaciones||0);
+      const sla = calcSLA(r);
+      if(sla!=='pendiente'){ p.slaTotal++; if(sla==='cumplido') p.slaCumplido++; }
+      if(r.eventosHSE && r.eventosHSE.length>0 && !r.eventosHSE.includes('Sin eventos')){
+        p.hseEventos += r.eventosHSE.length;
+        p.incidenciasHSE += r.eventosHSE.filter(e=>e.includes('Incidente')).length;
+      }
+      const c = parseNum(r.costoReal); if(c) p.costoTotal += c;
+      // intentar adivinar categoría
+      const s = r.servicio||'';
+      if(!p.categoria){
+        if(s.includes('Carga Terrestre')) p.categoria='Izajes y cargas';
+        else if(s.includes('Izajes')) p.categoria='Izajes y cargas';
+        else if(s.includes('Caminos')) p.categoria='Mantenimiento de caminos';
+        else if(s.includes('Cargas Líquidas')||s.includes('Agua')) p.categoria='Cisternas (petróleo/agua/efluentes)';
+        else if(s.includes('GasOil')) p.categoria='Provisión de gasoil en sitio';
+        else if(s.includes('Locación')) p.categoria='Servicios en Locación';
+      }
+    });
+  });
+
+  const payload = {
+    tipo: 'scorecard-logistica',
+    period: {q: 'Q'+Math.ceil((new Date().getMonth()+1)/3), y: new Date().getFullYear()},
+    evals: Object.values(provs).map(p=>{
+      const slaRate = p.slaTotal>0 ? p.slaCumplido/p.slaTotal : null;
+      const reprogRate = p.total>0 ? p.reprog/p.total : 0;
+      const cancelRate = p.total>0 ? p.cancelados/p.total : 0;
+      const incidHSEperN = p.total>0 ? p.incidenciasHSE/p.total : 0;
+      // Scores sugeridos 1-5 basados en datos
+      const score = (val, thresholds) => {
+        for(let i=0;i<thresholds.length;i++) if(val <= thresholds[i]) return 5-i;
+        return 1;
+      };
+      const scoreInv = (val, thresholds) => {
+        for(let i=0;i<thresholds.length;i++) if(val >= thresholds[i]) return 5-i;
+        return 1;
+      };
+      // SLA y OTIF (más alto = mejor): thresholds decrecientes
+      const sOTIF = slaRate===null ? 3 : scoreInv(slaRate,[0.95,0.85,0.75,0.60]);
+      const sReprog = score(reprogRate,[0.05,0.15,0.30,0.50]);  // más bajo = mejor
+      const sCancel = score(cancelRate,[0.02,0.10,0.20,0.35]);
+      const sHSE = score(incidHSEperN,[0,0.05,0.10,0.20]);
+      return {
+        id:'ev_auto_'+Math.random().toString(36).slice(2,8),
+        proveedor: p.proveedor,
+        categoria: p.categoria,
+        fecha: new Date().toISOString().slice(0,10),
+        scores: {
+          hse_eventos: sHSE, hse_docs:3, hse_obs:3, hse_resp:3,
+          perf_disp: sOTIF, perf_otif: sOTIF, perf_cal:3, perf_urg:3,
+          sla_lt: sOTIF, sla_turnos:3, sla_recl: sReprog, sla_rep:3,
+          com_fact: sCancel, com_disc:3, com_ctr:3, com_proa:3
+        },
+        comments: {
+          hse_eventos: `${p.incidenciasHSE} incidentes / ${p.total} requerimientos`,
+          perf_otif: `SLA cumplido ${slaRate===null?'s/d':((slaRate*100).toFixed(0)+'%')} (${p.slaCumplido}/${p.slaTotal})`,
+          sla_recl: `Reprog: ${p.reprog} (${(reprogRate*100).toFixed(0)}% del volumen)`,
+          com_fact: `Cancelados: ${p.cancelados} (${(cancelRate*100).toFixed(0)}%)`
+        },
+        resumen: `Auto-generado desde Sistema de Requerimientos. Total: ${p.total} req · Costo real: ${fmtMoneda(p.costoTotal)}. Revisar los scores con performance cualitativa antes del QBR.`
+      };
+    }),
+    exported: new Date().toISOString(),
+    note: 'Datos generados automáticamente desde el Sistema de Requerimientos Logísticos. Importar desde el Scorecard de Proveedores Logística.'
+  };
+
+  const blob = new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=`scorecard-proveedores-auto-${new Date().toISOString().split('T')[0]}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// Genera PDF de Orden de Trabajo
+function generarOT(r){
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({unit:'mm', format:'a4'});
+  const W = 210, mL = 15, mR = 15;
+
+  // Header
+  doc.setFillColor(0,43,69);
+  doc.rect(0,0,W,28,'F');
+  doc.setTextColor(255,255,255);
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(16);
+  doc.text('ORDEN DE TRABAJO — LOGÍSTICA', mL, 12);
+  doc.setFontSize(10);
+  doc.setFont('helvetica','normal');
+  doc.text(`ID: ${r.id||'—'}`, mL, 19);
+  doc.text(`Emitida: ${new Date().toLocaleDateString('es-AR')}`, W-mR, 19, {align:'right'});
+  doc.setTextColor(0,150,178);
+  doc.setFontSize(9);
+  doc.text(`Fecha Creación: ${r.fechaCreacion||'—'}  ·  Prioridad: ${r.prioridad||'—'}  ·  Estado: ${r.estado||'—'}`, mL, 25);
+
+  doc.setTextColor(0,0,0);
+  let y = 36;
+
+  const section = (title) => {
+    doc.setFillColor(230,244,248);
+    doc.rect(mL, y, W-mL-mR, 7, 'F');
+    doc.setTextColor(0,43,69);
+    doc.setFont('helvetica','bold');
+    doc.setFontSize(10);
+    doc.text(title, mL+2, y+5);
+    y += 10;
+    doc.setTextColor(0,0,0);
+    doc.setFont('helvetica','normal');
+    doc.setFontSize(9);
+  };
+  const row = (lbl, val) => {
+    if(y > 270){ doc.addPage(); y = 20; }
+    doc.setFont('helvetica','bold');
+    doc.text(`${lbl}:`, mL, y);
+    doc.setFont('helvetica','normal');
+    const t = String(val||'—');
+    const lines = doc.splitTextToSize(t, W-mL-mR-45);
+    doc.text(lines, mL+42, y);
+    y += Math.max(5, lines.length*4.5);
+  };
+
+  section('DATOS GENERALES');
+  row('Área solicitante', r.area);
+  row('Locación', r.locacion);
+  row('Servicio', r.servicio);
+  row('Fecha requerida', r.fechaRequerida);
+  row('Fecha programada', r.fechaProgramada);
+  row('Imputación de costo', r.imputacionCosto);
+  if(r.costoEstimado) row('Costo estimado', fmtMoneda(r.costoEstimado, r.moneda));
+
+  section('RECURSOS ASIGNADOS');
+  const rows = (r.recursosAsignados||[]).filter(ra=>ra.equipo).map(ra=>[
+    ra.equipo==='__custom__'?ra.custom:ra.equipo,
+    String(ra.cantidad||1),
+    ra.proveedor||'—',
+    ra.responsable||'—'
+  ]);
+  if(rows.length === 0){
+    doc.text('Sin recursos asignados', mL, y); y += 6;
+  } else {
+    doc.autoTable({
+      startY: y,
+      head: [['Equipo / Servicio','Cant.','Proveedor','Responsable']],
+      body: rows,
+      theme: 'grid',
+      headStyles: {fillColor:[0,43,69], textColor:255, fontSize:9, fontStyle:'bold'},
+      bodyStyles: {fontSize:8},
+      margin: {left:mL, right:mR}
+    });
+    y = doc.lastAutoTable.finalY + 5;
+  }
+
+  if(r.servicio==='Carga Terrestre' && (r.origen||r.destino)){
+    section('DATOS DE CARGA');
+    row('Origen', r.origen);
+    if(r.contactoOrigen?.nombre) row('Contacto origen', `${r.contactoOrigen.nombre} ${r.contactoOrigen.telefono||''}`);
+    row('Destino', r.destino);
+    if(r.contactoDestino?.nombre) row('Contacto destino', `${r.contactoDestino.nombre} ${r.contactoDestino.telefono||''}`);
+    row('Peso/Dimensiones', r.pesoDimensionesCarga);
+  }
+  if(r.servicio==='Izajes' && (r.pesoEquipoIzar||r.distanciaEquipo)){
+    section('DATOS DE IZAJE');
+    row('Peso equipo', r.pesoEquipoIzar);
+    row('Dimensiones', r.dimensionesEquipoIzar);
+    row('Distancia', r.distanciaEquipo);
+  }
+  if(r.servicio==='Provisión de GasOil' && (r.gradoGasOil||r.litrosGasOil)){
+    section('DATOS DE GASOIL');
+    row('Grado', r.gradoGasOil);
+    row('Litros', r.litrosGasOil ? r.litrosGasOil + ' lts' : '—');
+  }
+
+  if((r.contactos||[]).some(c=>c.nombre)){
+    section('CONTACTOS EN CAMPO');
+    (r.contactos||[]).filter(c=>c.nombre).forEach(c=>row(c.nombre, c.telefono));
+  }
+  if((r.responsablesPermiso||[]).some(c=>c.nombre)){
+    section('RESPONSABLES PERMISO DE TRABAJO');
+    (r.responsablesPermiso||[]).filter(c=>c.nombre).forEach(c=>row(c.nombre, c.telefono));
+  }
+  if(r.observaciones){
+    section('OBSERVACIONES');
+    const lines = doc.splitTextToSize(r.observaciones, W-mL-mR);
+    doc.text(lines, mL, y);
+    y += lines.length*4.5 + 2;
+  }
+
+  // Firmas
+  if(y > 230){ doc.addPage(); y = 20; }
+  y += 10;
+  section('FIRMAS');
+  const colW = (W-mL-mR)/2 - 3;
+  doc.setDrawColor(180);
+  doc.line(mL, y+18, mL+colW, y+18);
+  doc.line(mL+colW+6, y+18, mL+colW*2+6, y+18);
+  doc.setFontSize(8);
+  doc.text('Supervisor Logística', mL, y+22);
+  doc.text('Responsable Operativo / Proveedor', mL+colW+6, y+22);
+
+  // Footer
+  doc.setFontSize(7);
+  doc.setTextColor(120,120,120);
+  doc.text('Documento de uso interno · Orden de Trabajo generada automáticamente', mL, 290);
+
+  doc.save(`OT_${r.id||'sinID'}_${new Date().toISOString().split('T')[0]}.pdf`);
+}
 function PersonasEditor({personas,onChange,titulo}){
   const add=()=>onChange([...personas,emptyPersona()]);
   const remove=i=>onChange(personas.filter((_,idx)=>idx!==i));
@@ -178,7 +503,6 @@ function PersonasEditor({personas,onChange,titulo}){
     <button onClick={add} style={{background:"#e6f4f8",color:P303,border:`1px dashed ${P314}`,borderRadius:8,padding:"10px",cursor:"pointer",fontSize:14,fontWeight:600,width:"100%",touchAction:"manipulation"}}>+ Agregar {titulo}</button>
   </div>);
 }
-
 function RecursosEditor({recursos,onChange,servicio,asignacion=false}){
   const equipos=servicio?(EQUIPOS_POR_SERVICIO[servicio]||[]):[];
   const add=()=>onChange([...recursos,asignacion?emptyAsignado():emptyRecurso()]);
@@ -211,8 +535,6 @@ function RecursosEditor({recursos,onChange,servicio,asignacion=false}){
     <button onClick={add} style={{background:"#e6f4f8",color:P303,border:`1px dashed ${P314}`,borderRadius:8,padding:"10px",cursor:"pointer",fontSize:14,fontWeight:600,width:"100%",touchAction:"manipulation"}}>+ Agregar recurso</button>
   </div>);
 }
-
-// ── Campos específicos por servicio ───────────────────────────────────────
 function CamposCargaTerrestre({req,setReq}){
   const upd=(f,v)=>setReq(p=>({...p,[f]:v}));
   const updO=(f,v)=>setReq(p=>({...p,contactoOrigen:{...p.contactoOrigen,[f]:v}}));
@@ -237,7 +559,6 @@ function CamposCargaTerrestre({req,setReq}){
     <div style={S.field}><label style={S.label}>Peso y Dimensiones de la Carga</label><input style={S.input()} value={req.pesoDimensionesCarga} onChange={e=>upd("pesoDimensionesCarga",e.target.value)} placeholder="Ej: 5T — 3m x 2m x 2m"/></div>
   </Seccion>);
 }
-
 function CamposIzajes({req,setReq}){
   const upd=(f,v)=>setReq(p=>({...p,[f]:v}));
   return(<Seccion titulo="🏗️ Datos de Izaje" color={P303}>
@@ -246,7 +567,6 @@ function CamposIzajes({req,setReq}){
     <div style={S.field}><label style={S.label}>Distancia aprox. de posicionamiento</label><input style={S.input()} value={req.distanciaEquipo} onChange={e=>upd("distanciaEquipo",e.target.value)} placeholder="Ej: 8 metros desde la carga"/></div>
   </Seccion>);
 }
-
 function CamposGasOil({req,setReq}){
   const upd=(f,v)=>setReq(p=>({...p,[f]:v}));
   return(<Seccion titulo="⛽ Datos de Provisión de GasOil" color="#92400e">
@@ -265,44 +585,59 @@ function CamposGasOil({req,setReq}){
     </div>
   </Seccion>);
 }
-
-// ── Abreviaturas corporativas ──────────────────────────────────────────────
-const ABREV_LOCACION = {
-  "La Calera":       "LCa",
-  "Bajo del Choique":"BdC",
-  "Rio Colorado":    "RCo",
-};
-const ABREV_SERVICIO = {
-  "Izajes":                  "Izajes",
-  "Carga Terrestre":         "C. Terrestre",
-  "Mantenimiento de Caminos":"Caminos",
-  "Cargas Líquidas":         "C. Líquidas",
-  "Transporte de Agua":      "Agua",
-  "Provisión de GasOil":     "Gasoil",
-};
-
-
-function KPICard({label,value,sub,color,icon,alert}){
+function KPICard({label,value,sub,color,icon,alert,tramos}){
+  const total=tramos?tramos.r0_2+tramos.r2_5+tramos.r5:0;
   return(
     <div style={{background:alert?"#fef2f2":"#fff",border:`1px solid ${alert?"#fecaca":"#e5e7eb"}`,borderRadius:10,padding:"14px 16px",flex:1,minWidth:130}}>
       <div style={{fontSize:20}}>{icon}</div>
       <div style={{fontSize:24,fontWeight:800,color:alert?"#ef4444":color,marginTop:4}}>{value}</div>
       <div style={{fontSize:12,color:"#6b7280",marginTop:2,fontWeight:600}}>{label}</div>
-      {sub&&<div style={{fontSize:11,color:alert?"#ef4444":"#9ca3af",marginTop:2}}>{sub}</div>}
+      {sub&&!tramos&&<div style={{fontSize:11,color:alert?"#ef4444":"#9ca3af",marginTop:2}}>{sub}</div>}
+      {tramos&&total>0&&(
+        <div style={{marginTop:8,display:"grid",gap:4}}>
+          {[{label:"0 – 48 hs",val:tramos.r0_2,color:"#10b981"},{label:"2 – 5 días",val:tramos.r2_5,color:"#f59e0b"},{label:"+ 5 días",val:tramos.r5,color:"#ef4444"}].map(t=>(
+            <div key={t.label} style={{display:"flex",alignItems:"center",gap:6}}>
+              <div style={{flex:1,background:"#f3f4f6",borderRadius:99,height:6,overflow:"hidden"}}>
+                <div style={{background:t.color,height:6,borderRadius:99,width:`${(t.val/total)*100}%`,transition:"width .4s"}}/>
+              </div>
+              <span style={{fontSize:10,color:"#6b7280",whiteSpace:"nowrap",minWidth:54}}>{t.label}</span>
+              <span style={{fontSize:11,fontWeight:700,color:t.color,minWidth:14,textAlign:"right"}}>{t.val}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {tramos&&total===0&&<div style={{fontSize:11,color:"#9ca3af",marginTop:4}}>Sin datos suficientes</div>}
     </div>
   );
 }
 function BarChart({data,color=P314,height=130}){
   const max=Math.max(...data.map(d=>d.value),1);
-  return(<div style={{display:"flex",alignItems:"flex-end",gap:6,height,padding:"0 4px"}}>
-    {data.map((d,i)=>(
-      <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:3,minWidth:0}}>
-        <span style={{fontSize:11,fontWeight:700,color:"#374151"}}>{d.value||""}</span>
-        <div style={{width:"100%",background:typeof color==="function"?color(i):color,borderRadius:"4px 4px 0 0",height:`${(d.value/max)*75}%`,minHeight:d.value?3:0,transition:"height .4s"}}/>
-        <span style={{fontSize:10,color:"#9ca3af",textAlign:"center",lineHeight:1.2,width:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.label}</span>
+  const LABEL_H = 22;          // franja fija de etiquetas inferiores
+  const VALUE_H = 16;          // franja fija para el valor arriba
+  const chartH = Math.max(40, height - LABEL_H - VALUE_H);
+  return(
+    <div style={{height, padding:"0 4px", display:"flex", flexDirection:"column"}}>
+      {/* Área de barras — altura fija en px, proporción real */}
+      <div style={{display:"flex",alignItems:"flex-end",gap:6,height:chartH+VALUE_H}}>
+        {data.map((d,i)=>{
+          const hPx = Math.round((d.value/max) * chartH);
+          const bg = typeof color==="function" ? color(i) : color;
+          return (
+            <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"flex-end",minWidth:0,height:"100%"}}>
+              <span style={{fontSize:11,fontWeight:700,color:"#374151",height:VALUE_H,lineHeight:`${VALUE_H}px`}}>{d.value||""}</span>
+              <div style={{width:"100%",background:bg,borderRadius:"4px 4px 0 0",height:hPx,minHeight:d.value?3:0,transition:"height .4s"}}/>
+            </div>
+          );
+        })}
       </div>
-    ))}
-  </div>);
+      {/* Labels inferiores — franja fija */}
+      <div style={{display:"flex",gap:6,height:LABEL_H,paddingTop:4}}>
+        {data.map((d,i)=>(
+          <span key={i} style={{flex:1,fontSize:10,color:"#9ca3af",textAlign:"center",lineHeight:1.2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",minWidth:0}}>{d.label}</span>
+        ))}
+      </div>
+    </div>
+  );
 }
 function HBar({label,value,max,color=P314}){
   return(<div style={{marginBottom:10}}>
@@ -315,20 +650,20 @@ function HBar({label,value,max,color=P314}){
     </div>
   </div>);
 }
-
 function MetricasView({reqs,onBack,online,pendingWrites}){
   const [periodo,setPeriodo]=useState(30);
+  const [monedaView,setMonedaView]=useState('USD');
   const ahora=new Date();
   const hoy=ahora.toISOString().split('T')[0];
-  const sColors=[P314,P303,"#10b981","#f59e0b","#7c3aed","#ef4444"];
-
+  const sColors=[P314,P303,"#10b981","#f59e0b","#7c3aed","#ef4444","#6b7280"];
   const filtrados=reqs.filter(r=>{
     if(periodo===-1)return true;
     if(periodo===0){const f=new Date(r.fechaCreacion||hoy);return f.getMonth()===ahora.getMonth()&&f.getFullYear()===ahora.getFullYear();}
     const f=new Date(r.fechaCreacion||hoy);
     return(ahora-f)/(1000*60*60*24)<=periodo;
   });
-
+  // Filtrar por moneda para costos
+  const filtMoneda = filtrados.filter(r=>(r.moneda||"USD")===monedaView);
   const total=filtrados.length;
   const pendientes=filtrados.filter(r=>r.estado==="Pendiente").length;
   const enProceso=filtrados.filter(r=>r.estado==="En Proceso").length;
@@ -338,32 +673,84 @@ function MetricasView({reqs,onBack,online,pendingWrites}){
   const vencidos=filtrados.filter(r=>r.fechaRequerida<hoy&&r.estado!=="Completado"&&r.estado!=="Cancelado").length;
   const urgentes=filtrados.filter(r=>(r.prioridad==="Urgente"||r.prioridad==="Alta")&&r.estado==="Pendiente").length;
   const pctCompletado=total>0?Math.round((completados/total)*100):0;
-
   const conProg=filtrados.filter(r=>r.fechaProgramada&&r.fechaCreacion);
-  const avgAsig=conProg.length>0?Math.round(conProg.reduce((a,r)=>{const d=(new Date(r.fechaProgramada.split('T')[0])-new Date(r.fechaCreacion))/(1000*60*60*24);return a+Math.max(0,d);},0)/conProg.length):null;
-
-  const porServicio=SERVICIOS.map((s,i)=>({label:ABREV_SERVICIO[s]||s,value:filtrados.filter(r=>r.servicio===s).length,full:s}));
+  const diasAsig=conProg.map(r=>Math.max(0,(new Date(r.fechaProgramada.split('T')[0])-new Date(r.fechaCreacion))/(1000*60*60*24)));
+  const avgAsig=diasAsig.length>0?Math.round(diasAsig.reduce((a,d)=>a+d,0)/diasAsig.length):null;
+  const tramos={r0_2:diasAsig.filter(d=>d<=2).length,r2_5:diasAsig.filter(d=>d>2&&d<=5).length,r5:diasAsig.filter(d=>d>5).length};
+  const porServicio=SERVICIOS.map((s,i)=>({label:ABREV_SERVICIO[s]||s,value:filtrados.filter(r=>r.servicio===s).length}));
   const porLocacion=LOCACIONES.map(l=>({label:ABREV_LOCACION[l]||l,value:filtrados.filter(r=>r.locacion===l).length}));
-
   const imputMap={};
   filtrados.forEach(r=>{if(r.imputacionCosto)imputMap[r.imputacionCosto]=(imputMap[r.imputacionCosto]||0)+1;});
   const topImput=Object.entries(imputMap).sort((a,b)=>b[1]-a[1]).slice(0,6);
   const maxImput=topImput[0]?.[1]||1;
-
   const semanas=Array.from({length:8},(_,i)=>{
     const desde=new Date(ahora);desde.setDate(desde.getDate()-(7-i)*7);
     const hasta=new Date(ahora);hasta.setDate(hasta.getDate()-(6-i)*7);
     const ds=desde.toISOString().split('T')[0],hs=hasta.toISOString().split('T')[0];
     return{label:`S${i+1}`,value:reqs.filter(r=>(r.fechaCreacion||'')>=ds&&(r.fechaCreacion||'')<hs).length};
   });
-
+  // Evolución mensual (12 meses)
+  const meses = Array.from({length:12},(_,i)=>{
+    const d = new Date(ahora); d.setMonth(d.getMonth()-(11-i)); d.setDate(1);
+    const ds = d.toISOString().split('T')[0];
+    const d2 = new Date(d); d2.setMonth(d2.getMonth()+1);
+    const hs = d2.toISOString().split('T')[0];
+    const cnt = reqs.filter(r=>(r.fechaCreacion||'')>=ds&&(r.fechaCreacion||'')<hs).length;
+    return {label:['E','F','M','A','M','J','J','A','S','O','N','D'][d.getMonth()]+d.getFullYear().toString().slice(2), value:cnt};
+  });
+  // KPIs financieros y SLA
+  const costoTotalEst = filtMoneda.reduce((a,r)=>a+(parseNum(r.costoEstimado)||0),0);
+  const costoTotalReal = filtMoneda.filter(r=>r.estado==='Completado').reduce((a,r)=>a+(parseNum(r.costoReal)||0),0);
+  const conCostoAmbos = filtMoneda.filter(r=>parseNum(r.costoEstimado)&&parseNum(r.costoReal));
+  const desvioTotalEst = conCostoAmbos.reduce((a,r)=>a+(parseNum(r.costoEstimado)||0),0);
+  const desvioTotalReal = conCostoAmbos.reduce((a,r)=>a+(parseNum(r.costoReal)||0),0);
+  const desvioPct = desvioTotalEst>0 ? ((desvioTotalReal-desvioTotalEst)/desvioTotalEst*100) : null;
+  // SLA
+  const slaEval = filtrados.map(r=>calcSLA(r)).filter(s=>s!=='pendiente');
+  const slaCumplido = slaEval.filter(s=>s==='cumplido').length;
+  const slaPct = slaEval.length>0 ? (slaCumplido/slaEval.length*100) : null;
+  // Tiempo ciclo real
+  const ciclos = filtrados.filter(r=>r.fechaCreacion&&r.fechaFinReal).map(r=>diasEntre(r.fechaCreacion, r.fechaFinReal));
+  const avgCiclo = ciclos.length>0 ? Math.round(ciclos.reduce((a,b)=>a+b,0)/ciclos.length) : null;
+  // HSE
+  const totalEventosHSE = filtrados.reduce((a,r)=>{
+    const ev = (r.eventosHSE||[]).filter(e=>e!=='Sin eventos');
+    return a + ev.length;
+  },0);
+  const incidentesHSE = filtrados.reduce((a,r)=>a+(r.eventosHSE||[]).filter(e=>e.includes('Incidente')).length,0);
+  // Top proveedores por volumen
+  const provMap = {};
+  filtrados.forEach(r=>(r.recursosAsignados||[]).forEach(ra=>{
+    if(!ra.proveedor) return;
+    if(!provMap[ra.proveedor]) provMap[ra.proveedor]={total:0, reprog:0, cancel:0, slaCumplido:0, slaTotal:0, costo:0};
+    const p = provMap[ra.proveedor];
+    p.total++;
+    p.reprog += r.reprogramaciones||0;
+    if(r.estado==='Cancelado') p.cancel++;
+    const sla = calcSLA(r);
+    if(sla!=='pendiente'){ p.slaTotal++; if(sla==='cumplido') p.slaCumplido++; }
+    p.costo += (parseNum(r.costoReal)||0);
+  }));
+  const topProv = Object.entries(provMap).sort((a,b)=>b[1].total-a[1].total).slice(0,8);
+  // Por imputación (top costo)
+  const impCostoMap = {};
+  filtMoneda.forEach(r=>{
+    if(!r.imputacionCosto) return;
+    const c = (parseNum(r.costoReal)||parseNum(r.costoEstimado)||0);
+    impCostoMap[r.imputacionCosto] = (impCostoMap[r.imputacionCosto]||0) + c;
+  });
+  const topImpCosto = Object.entries(impCostoMap).sort((a,b)=>b[1]-a[1]).slice(0,6);
+  const maxImpCosto = topImpCosto[0]?.[1]||1;
+  // Costo por locación
+  const costoLoc = LOCACIONES.map(l=>({label:ABREV_LOCACION[l]||l, value: Math.round(filtMoneda.filter(r=>r.locacion===l).reduce((a,r)=>a+(parseNum(r.costoReal)||parseNum(r.costoEstimado)||0),0))}));
+  // Costo por servicio
+  const costoSvc = SERVICIOS.map(s=>({label:ABREV_SERVICIO[s]||s, value: Math.round(filtMoneda.filter(r=>r.servicio===s).reduce((a,r)=>a+(parseNum(r.costoReal)||parseNum(r.costoEstimado)||0),0))}));
   const Card=({title,children})=>(
     <div style={{background:"#fff",borderRadius:12,padding:20,border:"1px solid #e5e7eb"}}>
       <div style={{fontWeight:700,color:P303,fontSize:14,marginBottom:16}}>{title}</div>
       {children}
     </div>
   );
-
   return(
     <div style={{minHeight:"100vh",background:"#f1f5f9"}}>
       <StatusBar online={online} pendingWrites={pendingWrites}/>
@@ -374,11 +761,15 @@ function MetricasView({reqs,onBack,online,pendingWrites}){
           style={{background:"rgba(255,255,255,.15)",color:"#fff",border:"1px solid rgba(255,255,255,.3)",borderRadius:8,padding:"7px 12px",fontSize:13,fontWeight:600,outline:"none",cursor:"pointer",WebkitAppearance:"none"}}>
           <option value={7} style={{color:"#000"}}>Últimos 7 días</option>
           <option value={30} style={{color:"#000"}}>Últimos 30 días</option>
+          <option value={90} style={{color:"#000"}}>Últimos 90 días</option>
           <option value={0} style={{color:"#000"}}>Mes actual</option>
           <option value={-1} style={{color:"#000"}}>Todo el historial</option>
         </select>
+        <select value={monedaView} onChange={e=>setMonedaView(e.target.value)}
+          style={{background:"rgba(255,255,255,.15)",color:"#fff",border:"1px solid rgba(255,255,255,.3)",borderRadius:8,padding:"7px 12px",fontSize:13,fontWeight:600,cursor:"pointer"}}>
+          {MONEDAS.map(m=><option key={m} value={m} style={{color:"#000"}}>{m}</option>)}
+        </select>
       </div>
-
       <div style={{maxWidth:1200,margin:"0 auto",padding:"20px 14px"}}>
         <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:14}}>
           <KPICard label="Total" value={total} color={P303} icon="📋"/>
@@ -392,18 +783,77 @@ function MetricasView({reqs,onBack,online,pendingWrites}){
           <KPICard label="Vencidos" value={vencidos} color="#ef4444" icon="⚠️" alert={vencidos>0} sub="sin completar, fuera de fecha"/>
           <KPICard label="Alta/Urgente sin asignar" value={urgentes} color="#ef4444" icon="🚨" alert={urgentes>0}/>
           <KPICard label="% Completados" value={`${pctCompletado}%`} color="#10b981" icon="📊" sub={`${completados} de ${total}`}/>
-          <KPICard label="Días prom. a programar" value={avgAsig!==null?`${avgAsig}d`:"—"} color={P314} icon="⏱️" sub="creación → fecha programada"/>
+          <KPICard label="Días prom. a programar" value={avgAsig!==null?`${avgAsig}d`:"—"} color={P314} icon="⏱️" sub="creación → fecha programada" tramos={avgAsig!==null?tramos:null}/>
+        </div>
+
+        {/* KPIs NUEVOS: Financieros y SLA */}
+        <div style={{fontWeight:700,color:P303,fontSize:13,marginBottom:8,textTransform:"uppercase",letterSpacing:.6}}>💰 KPIs Financieros & SLA ({monedaView})</div>
+        <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:20}}>
+          <KPICard label={`Costo Total Estimado`} value={fmtMoneda(costoTotalEst,monedaView)} color={P303} icon="💵" sub={`${filtMoneda.length} requerimientos`}/>
+          <KPICard label={`Costo Total Real`} value={fmtMoneda(costoTotalReal,monedaView)} color={P303} icon="💰" sub="solo completados"/>
+          <KPICard label="Desvío Real vs Est." value={desvioPct===null?"—":(desvioPct>0?'+':'')+desvioPct.toFixed(1)+'%'} color={desvioPct===null?"#6b7280":desvioPct>10?"#ef4444":desvioPct<-10?"#10b981":"#f59e0b"} icon="📉" sub={`${conCostoAmbos.length} con datos ambos`} alert={desvioPct!==null && Math.abs(desvioPct)>15}/>
+          <KPICard label="SLA Compliance" value={slaPct===null?"—":slaPct.toFixed(0)+'%'} color={slaPct===null?"#6b7280":slaPct>=90?"#10b981":slaPct>=75?"#f59e0b":"#ef4444"} icon="🎯" sub={slaEval.length>0?`${slaCumplido} de ${slaEval.length} evaluados`:"sin datos"} alert={slaPct!==null && slaPct<75}/>
+          <KPICard label="Tiempo Ciclo Real" value={avgCiclo!==null?avgCiclo+'d':"—"} color={P314} icon="⏱️" sub={`${ciclos.length} completados · creación→fin real`}/>
+          <KPICard label="Eventos HSE" value={totalEventosHSE} color={incidentesHSE>0?"#ef4444":"#f59e0b"} icon="🦺" sub={`${incidentesHSE} incidentes reportables`} alert={incidentesHSE>0}/>
+        </div>
+
+        {/* Costo por locación / servicio */}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
+          <Card title={`💰 Costo por Locación (${monedaView})`}>
+            <BarChart data={costoLoc.map(d=>({label:d.label,value:d.value}))} color={P303} height={150}/>
+          </Card>
+          <Card title={`💰 Costo por Servicio (${monedaView})`}>
+            <BarChart data={costoSvc.filter(d=>d.value>0).map(d=>({label:d.label,value:d.value}))} color={P314} height={150}/>
+          </Card>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
           <Card title="📦 Por Tipo de Servicio"><BarChart data={porServicio} color={i=>sColors[i%sColors.length]} height={150}/></Card>
           <Card title="📍 Por Locación"><BarChart data={porLocacion} color={P314} height={150}/></Card>
         </div>
-        <div style={{display:"grid",gridTemplateColumns:"3fr 2fr",gap:16,marginBottom:16}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
           <Card title="📈 Evolución Semanal (últimas 8 semanas)"><BarChart data={semanas} color={P303} height={150}/></Card>
-          <Card title="💰 Top Imputaciones de Costo">
+          <Card title="📈 Evolución Mensual (últimos 12 meses)"><BarChart data={meses} color={P314} height={150}/></Card>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
+          <Card title="💰 Top Imputaciones (volumen)">
             {topImput.length===0?<div style={{color:"#9ca3af",fontSize:13,textAlign:"center",padding:"20px 0"}}>Sin datos en el período</div>
             :topImput.map(([imp,cnt])=><HBar key={imp} label={imp} value={cnt} max={maxImput}/>)}
           </Card>
+          <Card title={`💰 Top Imputaciones por Costo (${monedaView})`}>
+            {topImpCosto.length===0?<div style={{color:"#9ca3af",fontSize:13,textAlign:"center",padding:"20px 0"}}>Sin costos cargados en el período</div>
+            :topImpCosto.map(([imp,cnt])=><HBar key={imp} label={imp} value={Math.round(cnt)} max={maxImpCosto} color={P303}/>)}
+          </Card>
+        </div>
+
+        {/* Top proveedores con performance */}
+        <div style={{background:"#fff",borderRadius:12,padding:20,border:"1px solid #e5e7eb",marginBottom:16}}>
+          <div style={{fontWeight:700,color:P303,fontSize:14,marginBottom:16}}>🏆 Top Proveedores — Performance</div>
+          {topProv.length===0?<div style={{color:"#9ca3af",fontSize:13,textAlign:"center",padding:"20px 0"}}>Sin datos de proveedores en el período</div>
+          :<div className="tbl-scroll">
+            <table style={{width:"100%",fontSize:12,borderCollapse:"collapse",minWidth:700}}>
+              <thead><tr style={{background:"#f8fafc",borderBottom:`2px solid ${P314}44`}}>
+                <th style={{padding:8,textAlign:"left",color:P303}}>Proveedor</th>
+                <th style={{padding:8,textAlign:"right",color:P303}}>Volumen</th>
+                <th style={{padding:8,textAlign:"right",color:P303}}>SLA %</th>
+                <th style={{padding:8,textAlign:"right",color:P303}}>Reprog</th>
+                <th style={{padding:8,textAlign:"right",color:P303}}>Cancelados</th>
+                <th style={{padding:8,textAlign:"right",color:P303}}>Costo total</th>
+              </tr></thead>
+              <tbody>
+                {topProv.map(([p,d])=>{
+                  const sla = d.slaTotal>0 ? (d.slaCumplido/d.slaTotal*100) : null;
+                  return <tr key={p} style={{borderBottom:"1px solid #f3f4f6"}}>
+                    <td style={{padding:8,fontWeight:600,color:P303}}>{p}</td>
+                    <td style={{padding:8,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{d.total}</td>
+                    <td style={{padding:8,textAlign:"right",fontVariantNumeric:"tabular-nums",color:sla===null?"#9ca3af":sla>=90?"#10b981":sla>=75?"#f59e0b":"#ef4444",fontWeight:600}}>{sla===null?"—":sla.toFixed(0)+'%'}</td>
+                    <td style={{padding:8,textAlign:"right",fontVariantNumeric:"tabular-nums",color:d.reprog>0?"#7c3aed":"#9ca3af"}}>{d.reprog}</td>
+                    <td style={{padding:8,textAlign:"right",fontVariantNumeric:"tabular-nums",color:d.cancel>0?"#ef4444":"#9ca3af"}}>{d.cancel}</td>
+                    <td style={{padding:8,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{d.costo>0?fmtMoneda(d.costo,monedaView):"—"}</td>
+                  </tr>;
+                })}
+              </tbody>
+            </table>
+          </div>}
         </div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
           <Card title="🎯 Distribución por Prioridad">
@@ -416,8 +866,273 @@ function MetricasView({reqs,onBack,online,pendingWrites}){
     </div>
   );
 }
+// ============== VISTA CALENDARIO (semanal + mensual) ==============
+function CalendarioView({reqs,onBack,online,pendingWrites}){
+  // Vista actual
+  const [vista, setVista] = useState('semana');  // 'semana' | 'mes'
+  // Fecha de referencia (se navega cambiando esta fecha)
+  const [ref, setRef] = useState(()=>{ const d=new Date(); d.setHours(0,0,0,0); return d; });
+  const [agruparPor, setAgruparPor] = useState('proveedor');
+  const [detalleDia, setDetalleDia] = useState(null); // fecha del día para modal detalle
 
-// ── App principal ──────────────────────────────────────────────────────────
+  const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  const DIAS_CORTO = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
+
+  const navegar = (delta) => {
+    const d = new Date(ref);
+    if(vista==='semana') d.setDate(d.getDate()+delta*7);
+    else d.setMonth(d.getMonth()+delta);
+    setRef(d);
+  };
+  const irAHoy = () => { const d=new Date(); d.setHours(0,0,0,0); setRef(d); };
+  const irAFecha = (str) => { if(!str)return; const d=new Date(str); d.setHours(0,0,0,0); setRef(d); };
+
+  // Cálculo de inicio de semana (lunes) a partir de ref
+  const inicioSemana = (()=>{
+    const d = new Date(ref);
+    const dia = d.getDay();
+    const diff = d.getDate() - dia + (dia===0?-6:1);
+    d.setDate(diff); d.setHours(0,0,0,0);
+    return d;
+  })();
+  const dias7 = Array.from({length:7},(_,i)=>{
+    const d = new Date(inicioSemana); d.setDate(d.getDate()+i);
+    return d;
+  });
+
+  // Cálculo de grilla mensual (empieza en el lunes anterior al día 1)
+  const mesGrid = (()=>{
+    const y = ref.getFullYear(), m = ref.getMonth();
+    const primero = new Date(y,m,1);
+    const diaSemPrim = primero.getDay();
+    const offsetInicio = diaSemPrim===0 ? 6 : diaSemPrim-1;
+    const start = new Date(y, m, 1 - offsetInicio);
+    start.setHours(0,0,0,0);
+    const arr = [];
+    for(let i=0;i<42;i++){
+      const d = new Date(start); d.setDate(d.getDate()+i);
+      arr.push(d);
+    }
+    // Si la última fila entera queda en el mes siguiente, cortamos a 35
+    const ultimaFila = arr.slice(35);
+    if(ultimaFila.every(d=>d.getMonth()!==m)) arr.length = 35;
+    return arr;
+  })();
+
+  // Requerimientos de un día específico
+  const reqsDe = (d) => {
+    const ds = d.toISOString().split('T')[0];
+    return reqs.filter(r => (r.fechaProgramada||'').startsWith(ds));
+  };
+  const esHoy = d => d.toDateString() === new Date().toDateString();
+
+  // ===== VISTA SEMANAL =====
+  const reqsEnSemana = reqs.filter(r=>{
+    if(!r.fechaProgramada) return false;
+    const fp = new Date((r.fechaProgramada.split('T')[0] || r.fechaProgramada)+'T00:00:00');
+    const fin = new Date(dias7[6]); fin.setHours(23,59,59);
+    return fp >= inicioSemana && fp <= fin;
+  });
+  const getKey = (r) => {
+    if(agruparPor==='proveedor'){
+      const prov = (r.recursosAsignados||[]).map(ra=>ra.proveedor).filter(Boolean)[0];
+      return prov || 'Sin proveedor';
+    }
+    if(agruparPor==='servicio') return r.servicio || 'Sin servicio';
+    return r.locacion || 'Sin locación';
+  };
+  const grupos = {};
+  reqsEnSemana.forEach(r=>{ const k=getKey(r); if(!grupos[k])grupos[k]=[]; grupos[k].push(r); });
+
+  // Título del header según vista
+  const titulo = vista==='semana'
+    ? `${inicioSemana.toLocaleDateString('es-AR')} – ${dias7[6].toLocaleDateString('es-AR')}`
+    : `${MESES[ref.getMonth()]} ${ref.getFullYear()}`;
+
+  // Resumen por estado del período
+  const reqsPeriodo = vista==='semana' ? reqsEnSemana :
+    reqs.filter(r=>{
+      if(!r.fechaProgramada) return false;
+      const fp = new Date(r.fechaProgramada.split('T')[0]);
+      return fp.getMonth()===ref.getMonth() && fp.getFullYear()===ref.getFullYear();
+    });
+
+  // Botones
+  const btnStyle = {background:"rgba(255,255,255,.2)",color:"#fff",border:"1px solid rgba(255,255,255,.35)",borderRadius:8,padding:"9px 14px",cursor:"pointer",fontSize:14,fontWeight:700,touchAction:"manipulation",minWidth:42};
+  const tabStyle = (active) => ({background:active?"#fff":"rgba(255,255,255,.15)",color:active?P303:"#fff",border:"1px solid rgba(255,255,255,.35)",borderRadius:8,padding:"8px 14px",cursor:"pointer",fontSize:13,fontWeight:700,touchAction:"manipulation"});
+
+  return (
+    <div style={{minHeight:"100vh",background:"#f1f5f9"}}>
+      <StatusBar online={online} pendingWrites={pendingWrites}/>
+      <div style={{background:GRAD,padding:"14px 20px",display:"flex",alignItems:"center",gap:12,position:"sticky",top:0,zIndex:50,flexWrap:"wrap"}}>
+        <button onClick={onBack} style={{background:"rgba(255,255,255,.15)",border:"none",color:"#fff",cursor:"pointer",fontSize:18,borderRadius:8,width:36,height:36}}>←</button>
+        <div style={{flex:1,minWidth:200}}>
+          <div style={{color:"#fff",fontWeight:700,fontSize:16}}>📅 Calendario · {titulo}</div>
+          <div style={{color:"rgba(255,255,255,.7)",fontSize:11}}>{reqsPeriodo.length} requerimientos programados en el período</div>
+        </div>
+        <div style={{display:"flex",gap:4}}>
+          <button onClick={()=>setVista('semana')} style={tabStyle(vista==='semana')}>Semana</button>
+          <button onClick={()=>setVista('mes')} style={tabStyle(vista==='mes')}>Mes</button>
+        </div>
+      </div>
+
+      {/* Toolbar de navegación */}
+      <div style={{background:"#fff",borderBottom:"1px solid #e5e7eb",padding:"10px 20px",display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
+        <button onClick={()=>navegar(-1)} style={{...btnStyle,background:P303,color:"#fff",border:0}}>◀ {vista==='semana'?'Semana':'Mes'} ant.</button>
+        <button onClick={irAHoy} style={{...btnStyle,background:"#fff",color:P303,border:`1.5px solid ${P314}`}}>📍 Hoy</button>
+        <button onClick={()=>navegar(1)} style={{...btnStyle,background:P303,color:"#fff",border:0}}>{vista==='semana'?'Semana':'Mes'} sig. ▶</button>
+        <div style={{marginLeft:"auto",display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
+          <label style={{fontSize:12,color:"#6b7280",fontWeight:600}}>Ir a fecha:
+            <input type="date" onChange={e=>irAFecha(e.target.value)} style={{marginLeft:6,padding:"6px 10px",borderRadius:8,border:"1.5px solid #d1d5db",fontSize:13,fontFamily:"inherit"}}/>
+          </label>
+          {vista==='semana' && (
+            <select value={agruparPor} onChange={e=>setAgruparPor(e.target.value)} style={{padding:"8px 12px",borderRadius:8,border:"1.5px solid #d1d5db",fontSize:13,fontWeight:600}}>
+              <option value="proveedor">Agrupar: Proveedor</option>
+              <option value="servicio">Agrupar: Servicio</option>
+              <option value="locacion">Agrupar: Locación</option>
+            </select>
+          )}
+        </div>
+      </div>
+
+      <div style={{maxWidth:1400,margin:"0 auto",padding:"20px 14px"}}>
+
+        {/* ============ VISTA MENSUAL ============ */}
+        {vista==='mes' && (
+          <div style={{background:"#fff",borderRadius:10,border:"1px solid #e5e7eb",overflow:"hidden"}}>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",background:"#f8fafc",borderBottom:`2px solid ${P314}44`}}>
+              {DIAS_CORTO.map(dn=><div key={dn} style={{padding:10,textAlign:"center",fontWeight:700,color:P303,fontSize:12,textTransform:"uppercase",letterSpacing:.4}}>{dn}</div>)}
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)"}}>
+              {mesGrid.map((d,idx)=>{
+                const enDia = reqsDe(d);
+                const enMes = d.getMonth() === ref.getMonth();
+                const hoy = esHoy(d);
+                const countByEstado = ESTADOS.reduce((a,s)=>{ a[s]=enDia.filter(r=>r.estado===s).length; return a; },{});
+                return (
+                  <div key={idx} onClick={()=>enDia.length&&setDetalleDia(d)}
+                    style={{minHeight:100,padding:"6px 8px",borderRight:(idx%7!==6)?"1px solid #f1f5f9":"none",borderBottom:idx<mesGrid.length-7?"1px solid #f1f5f9":"none",background:hoy?'#fffbeb':(enMes?'#fff':'#f9fafb'),opacity:enMes?1:0.55,cursor:enDia.length?'pointer':'default',position:"relative"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                      <span style={{fontSize:13,fontWeight:hoy?800:600,color:hoy?"#92400e":(enMes?P303:"#9ca3af")}}>{d.getDate()}</span>
+                      {enDia.length>0 && <span style={{background:P314,color:"#fff",fontSize:10,fontWeight:700,borderRadius:99,padding:"1px 7px",minWidth:18,textAlign:"center"}}>{enDia.length}</span>}
+                    </div>
+                    <div style={{display:"grid",gap:2}}>
+                      {enDia.slice(0,3).map(r=>{
+                        const col = estadoColor[r.estado];
+                        return (
+                          <div key={r._docId} style={{background:col+'22',borderLeft:`3px solid ${col}`,padding:"2px 5px",borderRadius:3,fontSize:10,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                            <b style={{color:P303}}>{(r.fechaProgramada||'').split('T')[1]?.slice(0,5)}</b> {servicioIcon[r.servicio]} {r.id||'Sin ID'}
+                          </div>
+                        );
+                      })}
+                      {enDia.length>3 && <div style={{fontSize:10,color:"#6b7280",textAlign:"center",fontStyle:"italic",marginTop:2}}>+{enDia.length-3} más...</div>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ============ VISTA SEMANAL ============ */}
+        {vista==='semana' && (
+          reqsEnSemana.length===0 ? (
+            <div style={{background:"#fff",borderRadius:10,padding:40,textAlign:"center",border:"1px solid #e5e7eb",color:"#9ca3af"}}>
+              No hay requerimientos programados para esta semana
+            </div>
+          ) : (
+            <div className="tbl-scroll" style={{background:"#fff",borderRadius:10,border:"1px solid #e5e7eb"}}>
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:12,minWidth:1000}}>
+                <thead>
+                  <tr style={{background:"#f8fafc",borderBottom:`2px solid ${P314}44`}}>
+                    <th style={{padding:10,textAlign:"left",fontWeight:700,color:P303,whiteSpace:"nowrap",minWidth:140,position:"sticky",left:0,background:"#f8fafc",zIndex:2}}>{agruparPor==='proveedor'?'Proveedor':agruparPor==='servicio'?'Servicio':'Locación'}</th>
+                    {dias7.map((d,i)=>(
+                      <th key={i} style={{padding:10,textAlign:"center",fontWeight:700,color:P303,minWidth:130,background:esHoy(d)?'#fffbeb':'#f8fafc'}}>
+                        <div style={{fontSize:11,opacity:.7}}>{DIAS_CORTO[i]}</div>
+                        <div style={{fontSize:13}}>{d.getDate()}/{d.getMonth()+1}</div>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(grupos).sort().map(([k,grp])=>(
+                    <tr key={k} style={{borderBottom:"1px solid #f3f4f6"}}>
+                      <td style={{padding:8,fontWeight:600,color:P303,whiteSpace:"nowrap",position:"sticky",left:0,background:"#fff",borderRight:"1px solid #e5e7eb"}}>{k}<div style={{fontSize:10,color:"#9ca3af",fontWeight:400}}>{grp.length} req</div></td>
+                      {dias7.map((d,i)=>{
+                        const ds = d.toISOString().split('T')[0];
+                        const enDia = grp.filter(r=>(r.fechaProgramada||'').startsWith(ds));
+                        return (
+                          <td key={i} style={{padding:4,verticalAlign:"top",background:esHoy(d)?'#fffbeb':'transparent',minHeight:60}}>
+                            {enDia.map(r=>{
+                              const col = estadoColor[r.estado];
+                              const hora = (r.fechaProgramada||'').split('T')[1]?.slice(0,5) || '';
+                              return (
+                                <div key={r._docId} style={{background:col+'22',borderLeft:`3px solid ${col}`,padding:"4px 6px",borderRadius:4,marginBottom:3,fontSize:11}}>
+                                  <div style={{fontWeight:700,color:P303}}>{hora && `${hora} · `}{r.id||'Sin ID'}</div>
+                                  <div style={{color:"#374151",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{servicioIcon[r.servicio]} {r.locacion}</div>
+                                  <div style={{color:"#6b7280",fontSize:10}}>{(r.recursosAsignados||[]).filter(ra=>ra.equipo).map(ra=>ra.equipo==='__custom__'?ra.custom:ra.equipo).join(', ')}</div>
+                                </div>
+                              );
+                            })}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )
+        )}
+
+        {/* Resumen */}
+        <div style={{marginTop:14,fontSize:12,color:"#6b7280",display:"flex",gap:16,flexWrap:"wrap"}}>
+          <span>Total en el {vista==='semana'?'período':'mes'}: <b style={{color:P303}}>{reqsPeriodo.length}</b></span>
+          <span>Pendientes: <b style={{color:"#f59e0b"}}>{reqsPeriodo.filter(r=>r.estado==="Pendiente").length}</b></span>
+          <span>En Proceso: <b style={{color:P314}}>{reqsPeriodo.filter(r=>r.estado==="En Proceso").length}</b></span>
+          <span>Completados: <b style={{color:"#10b981"}}>{reqsPeriodo.filter(r=>r.estado==="Completado").length}</b></span>
+          <span>Cancelados: <b style={{color:"#6b7280"}}>{reqsPeriodo.filter(r=>r.estado==="Cancelado").length}</b></span>
+        </div>
+      </div>
+
+      {/* MODAL de detalle del día (vista mensual) */}
+      {detalleDia && (
+        <div style={{position:"fixed",inset:0,background:"#0008",display:"flex",alignItems:"center",justifyContent:"center",zIndex:100,padding:16}} onClick={e=>{if(e.target===e.currentTarget)setDetalleDia(null);}}>
+          <div style={{background:"#fff",borderRadius:14,padding:22,width:"100%",maxWidth:600,maxHeight:"80vh",overflowY:"auto",boxShadow:"0 -8px 40px #0003"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+              <div><h3 style={{color:P303,fontSize:17,margin:0}}>📅 {detalleDia.toLocaleDateString('es-AR',{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</h3><div style={{color:"#6b7280",fontSize:13,marginTop:2}}>{reqsDe(detalleDia).length} requerimientos</div></div>
+              <button onClick={()=>setDetalleDia(null)} style={{background:"#f3f4f6",border:"none",borderRadius:8,padding:"8px 12px",cursor:"pointer",fontSize:16}}>✕</button>
+            </div>
+            <div style={{display:"grid",gap:10}}>
+              {reqsDe(detalleDia).sort((a,b)=>(a.fechaProgramada||'').localeCompare(b.fechaProgramada||'')).map(r=>{
+                const col = estadoColor[r.estado];
+                const hora = (r.fechaProgramada||'').split('T')[1]?.slice(0,5) || 'Sin hora';
+                return (
+                  <div key={r._docId} style={{background:col+'11',borderLeft:`4px solid ${col}`,padding:"10px 14px",borderRadius:8}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6,flexWrap:"wrap",gap:8}}>
+                      <div style={{fontWeight:700,color:P303,fontSize:14}}>🕐 {hora} · {r.id||'Sin ID'}</div>
+                      <Badge color={col} text={r.estado}/>
+                    </div>
+                    <div style={{fontSize:13,color:"#374151"}}>{servicioIcon[r.servicio]} <b>{r.servicio}</b> · 📍 {r.locacion}</div>
+                    <div style={{fontSize:12,color:"#6b7280",marginTop:4}}>🏢 {r.area}</div>
+                    {(r.recursosAsignados||[]).filter(ra=>ra.equipo).length>0 && (
+                      <div style={{fontSize:12,color:"#6b7280",marginTop:4}}>
+                        ⚙️ {(r.recursosAsignados||[]).filter(ra=>ra.equipo).map(ra=>`${ra.equipo==='__custom__'?ra.custom:ra.equipo} ×${ra.cantidad}`).join(', ')}
+                        {(r.recursosAsignados||[]).some(ra=>ra.proveedor) && <div style={{fontSize:11,marginTop:2}}>🏭 {(r.recursosAsignados||[]).map(ra=>ra.proveedor).filter(Boolean).join(', ')}</div>}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 function App(){
   const [view,setView]           = useState("home");
   const [reqs,setReqs]           = useState([]);
@@ -433,8 +1148,17 @@ function App(){
   const [submitted,setSubmitted] = useState(false);
   const [enviando,setEnviando]   = useState(false);
   const [lastDocId,setLastDocId] = useState("");
+  const [lastReqId,setLastReqId] = useState("");
   const [errors,setErrors]       = useState({});
-
+  const [cerrando,setCerrando]   = useState(null);  // req siendo cerrado (modal)
+  const [cancelando,setCancelando] = useState(null);// req siendo cancelado (modal)
+  const [cierreForm,setCierreForm] = useState({fechaInicioReal:"",fechaFinReal:"",costoReal:"",observacionesCierre:"",eventosHSE:[]});
+  const [cancelForm,setCancelForm] = useState({motivoCancelacion:"",detalleCancelacion:""});
+  const [fFechaDesde,setFFechaDesde] = useState("");
+  const [fFechaHasta,setFFechaHasta] = useState("");
+  const [fProveedor,setFProveedor] = useState("");
+  const [fSoloVencidos,setFSoloVencidos] = useState(false);
+  const [fSoloReprog,setFSoloReprog] = useState(false);
   useEffect(()=>{
     const unsub=db.collection(COL).orderBy('_ts','asc').onSnapshot({includeMetadataChanges:true},snap=>{setReqs(snap.docs.map(d=>({...d.data(),_docId:d.id})));setPending(snap.docs.some(d=>d.metadata.hasPendingWrites));setLoading(false);},()=>setLoading(false));
     return unsub;
@@ -444,32 +1168,49 @@ function App(){
     window.addEventListener('online',on); window.addEventListener('offline',off);
     return()=>{ window.removeEventListener('online',on); window.removeEventListener('offline',off); };
   },[]);
-
   const handleServicio=v=>setNewReq(p=>({...p,servicio:v,recursosSolicitados:[emptyRecurso()]}));
-
   const filtered=reqs.filter(r=>{
     const q=search.toLowerCase();
-    return(!filtroS||r.servicio===filtroS)&&(!filtroE||r.estado===filtroE)&&(!q||(r.id||"").toLowerCase().includes(q)||(r.area||"").toLowerCase().includes(q)||(r.locacion||"").toLowerCase().includes(q));
+    if(filtroS && r.servicio!==filtroS) return false;
+    if(filtroE && r.estado!==filtroE) return false;
+    if(fFechaDesde && (r.fechaRequerida||"") < fFechaDesde) return false;
+    if(fFechaHasta && (r.fechaRequerida||"") > fFechaHasta) return false;
+    if(fProveedor){
+      const provs = (r.recursosAsignados||[]).map(ra=>(ra.proveedor||"").toLowerCase()).join(' ');
+      if(!provs.includes(fProveedor.toLowerCase())) return false;
+    }
+    if(fSoloVencidos && !estaVencido(r)) return false;
+    if(fSoloReprog && !(r.reprogramaciones>0)) return false;
+    if(q){
+      const blob = [(r.id||""),(r.area||""),(r.locacion||""),(r.imputacionCosto||""),((r.contactos||[]).map(c=>c.nombre).join(' '))].join(' ').toLowerCase();
+      if(!blob.includes(q)) return false;
+    }
+    return true;
   });
-
+  // Lista de proveedores únicos para el filtro
+  const proveedoresUnicos = Array.from(new Set(reqs.flatMap(r=>(r.recursosAsignados||[]).map(ra=>ra.proveedor)).filter(Boolean))).sort();
   const validate=()=>{const e={};if(!newReq.area.trim())e.area=true;if(!newReq.locacion)e.locacion=true;if(!newReq.servicio)e.servicio=true;if(!newReq.fechaRequerida)e.fechaRequerida=true;if(!newReq.imputacionCosto.trim())e.imputacionCosto=true;return e;};
-
   const submitReq=async()=>{
     const e=validate();if(Object.keys(e).length){setErrors(e);return;}
     setEnviando(true);
-    try{const docRef=await db.collection(COL).add({...newReq,id:"",estado:"Pendiente",fechaCreacion:new Date().toISOString().split("T")[0],recursosAsignados:[],fechaProgramada:"",archivos:[],reprogramaciones:0,_ts:Date.now()});setLastDocId(docRef.id);setSubmitted(true);}
+    try{
+      const idAuto = generarIdAuto(reqs);
+      const docRef=await db.collection(COL).add({...newReq,id:idAuto,estado:"Pendiente",fechaCreacion:new Date().toISOString().split("T")[0],recursosAsignados:[],fechaProgramada:"",archivos:[],reprogramaciones:0,_ts:Date.now()});
+      setLastDocId(docRef.id);
+      setLastReqId(idAuto);
+      setSubmitted(true);
+    }
     catch(err){console.error(err);}
     finally{setEnviando(false);}
   };
-
-  const resetForm=()=>{setNewReq(emptyReq());setSubmitted(false);setEnviando(false);setLastDocId("");setErrors({});};
-
-  const abrirAsignar=req=>{setAsignando(req);setAsignForm({id:req.id||"",recursosAsignados:req.recursosAsignados?.length?req.recursosAsignados.map(r=>({...r})):[emptyAsignado()],fechaProgramada:req.fechaProgramada||""});};
-
+  const resetForm=()=>{setNewReq(emptyReq());setSubmitted(false);setEnviando(false);setLastDocId("");setLastReqId("");setErrors({});};
+  const abrirAsignar=req=>{setAsignando(req);setAsignForm({id:req.id||"",recursosAsignados:req.recursosAsignados?.length?req.recursosAsignados.map(r=>({...r})):[emptyAsignado()],fechaProgramada:req.fechaProgramada||"",costoEstimado:req.costoEstimado||"",moneda:req.moneda||"USD"});};
   const guardarAsignacion=async()=>{
     const esNuevoId=asignForm.id&&asignForm.id!==asignando.id;
     const esReprog=asignando.estado==="En Proceso";
     const upd={id:asignForm.id,recursosAsignados:asignForm.recursosAsignados,fechaProgramada:asignForm.fechaProgramada,estado:asignForm.recursosAsignados.some(ra=>ra.equipo)?"En Proceso":asignando.estado};
+    if(asignForm.costoEstimado!==undefined) upd.costoEstimado = asignForm.costoEstimado;
+    if(asignForm.moneda) upd.moneda = asignForm.moneda;
     if(esReprog) upd.reprogramaciones=firebase.firestore.FieldValue.increment(1);
     await db.collection(COL).doc(asignando._docId).update(upd);
     if(esNuevoId&&asignando.emailSolicitante&&EMAILJS_PUBLIC_KEY!=="TU_PUBLIC_KEY"){
@@ -478,15 +1219,46 @@ function App(){
     }
     setAsignando(null);
   };
-
-  const completar=async r=>await db.collection(COL).doc(r._docId).update({estado:"Completado"});
-  const cancelar =async r=>await db.collection(COL).doc(r._docId).update({estado:"Cancelado"});
-
+  // Completar: abre modal para capturar tiempos reales + costo + HSE
+  const abrirCierre = r => {
+    setCerrando(r);
+    setCierreForm({
+      fechaInicioReal: r.fechaInicioReal || r.fechaProgramada?.split('T')[0] || "",
+      fechaFinReal: r.fechaFinReal || new Date().toISOString().split('T')[0],
+      costoReal: r.costoReal || "",
+      observacionesCierre: r.observacionesCierre || "",
+      eventosHSE: r.eventosHSE || []
+    });
+  };
+  const guardarCierre = async () => {
+    if(!cierreForm.fechaFinReal){ alert('La fecha de finalización real es obligatoria'); return; }
+    await db.collection(COL).doc(cerrando._docId).update({
+      estado:"Completado",
+      fechaInicioReal: cierreForm.fechaInicioReal,
+      fechaFinReal: cierreForm.fechaFinReal,
+      costoReal: cierreForm.costoReal,
+      observacionesCierre: cierreForm.observacionesCierre,
+      eventosHSE: cierreForm.eventosHSE
+    });
+    setCerrando(null);
+  };
+  const abrirCancelacion = r => {
+    setCancelando(r);
+    setCancelForm({motivoCancelacion:r.motivoCancelacion||"", detalleCancelacion:r.detalleCancelacion||""});
+  };
+  const guardarCancelacion = async () => {
+    if(!cancelForm.motivoCancelacion){ alert('Seleccioná un motivo de cancelación'); return; }
+    await db.collection(COL).doc(cancelando._docId).update({
+      estado:"Cancelado",
+      motivoCancelacion: cancelForm.motivoCancelacion,
+      detalleCancelacion: cancelForm.detalleCancelacion
+    });
+    setCancelando(null);
+  };
   const pendientes=reqs.filter(r=>r.estado==="Pendiente").length;
   const enProceso=reqs.filter(r=>r.estado==="En Proceso").length;
   const completados=reqs.filter(r=>r.estado==="Completado").length;
   const maxSvc=Math.max(...SERVICIOS.map(s=>reqs.filter(r=>r.servicio===s).length),1);
-
   const navHeader=(title,sub,extra)=>(
     <div style={{background:GRAD,padding:"14px 20px",display:"flex",alignItems:"center",gap:12,position:"sticky",top:0,zIndex:50}}>
       <button onClick={()=>{setView("home");resetForm();}} style={{background:"rgba(255,255,255,.15)",border:"none",color:"#fff",cursor:"pointer",fontSize:18,borderRadius:8,width:36,height:36,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>←</button>
@@ -494,12 +1266,9 @@ function App(){
       {extra}
     </div>
   );
-
   if(view==="metricas") return <MetricasView reqs={reqs} onBack={()=>setView("logistica")} online={online} pendingWrites={pending}/>;
-
+  if(view==="calendario") return <CalendarioView reqs={reqs} onBack={()=>setView("logistica")} online={online} pendingWrites={pending}/>;
   if(loading)return(<div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:GRAD2,flexDirection:"column",gap:16}}><div style={{fontSize:52}}>🏗️</div><div style={{color:"#fff",fontSize:18,fontWeight:600}}>Cargando...</div><div style={{color:"rgba(255,255,255,.7)",fontSize:13}}>{navigator.onLine?"Conectando...":"Cargando datos locales..."}</div></div>);
-
-  // ── HOME ──────────────────────────────────────────────────────────────────
   if(view==="home")return(
     <div style={{minHeight:"100vh",background:GRAD2,display:"flex",flexDirection:"column"}}>
       <StatusBar online={online} pendingWrites={pending}/>
@@ -507,7 +1276,7 @@ function App(){
         <div style={{textAlign:"center",color:"#fff",width:"100%",maxWidth:400}}>
           <div style={{fontSize:52,marginBottom:10}}>🏗️</div>
           <h1 style={{fontSize:24,fontWeight:800,lineHeight:1.2}}>Sistema de Requerimientos Logísticos</h1>
-          <p style={{color:"rgba(255,255,255,.75)",marginTop:10,fontSize:14,lineHeight:1.5}}>Izajes · Carga Terrestre · Mantenimiento · Cargas Líquidas · Agua · GasOil</p>
+          <p style={{color:"rgba(255,255,255,.75)",marginTop:10,fontSize:14,lineHeight:1.5}}>Izajes · Carga Terrestre · Mantenimiento · Cargas Líquidas · Agua · GasOil · Locación</p>
           <div style={{display:"grid",gap:12,marginTop:36}}>
             <button onClick={()=>setView("solicitante")} style={{background:"#fff",color:P303,border:"none",borderRadius:12,padding:"20px 24px",fontWeight:700,fontSize:17,cursor:"pointer",boxShadow:"0 4px 20px #0004",touchAction:"manipulation"}}>
               📝 Ingresar Requerimiento<div style={{fontSize:13,fontWeight:400,color:"#6b7280",marginTop:4}}>Soy solicitante</div>
@@ -520,8 +1289,6 @@ function App(){
       </div>
     </div>
   );
-
-  // ── SOLICITANTE ───────────────────────────────────────────────────────────
   if(view==="solicitante")return(
     <div style={{minHeight:"100vh",background:"#f8fafc",display:"flex",flexDirection:"column"}}>
       <StatusBar online={online} pendingWrites={pending}/>
@@ -533,6 +1300,13 @@ function App(){
               <div style={{fontSize:56}}>✅</div>
               <h2 style={{color:"#10b981",margin:"12px 0 6px",fontSize:20}}>¡Requerimiento enviado!</h2>
               <p style={{color:"#6b7280",fontSize:14,lineHeight:1.5}}>Tu solicitud fue registrada y será gestionada por Programación Logística.</p>
+              {lastReqId&&(
+                <div style={{background:GRAD,borderRadius:10,padding:"14px 18px",margin:"14px 0",color:"#fff",lineHeight:1.5}}>
+                  <div style={{fontSize:11,textTransform:"uppercase",letterSpacing:".6px",opacity:.85}}>ID de Seguimiento</div>
+                  <div style={{fontSize:22,fontWeight:800,marginTop:4,letterSpacing:"1px"}}>{lastReqId}</div>
+                  <div style={{fontSize:11,opacity:.8,marginTop:4}}>Guardalo para futuras consultas</div>
+                </div>
+              )}
               <div style={{background:"#e6f4f8",border:`1px solid ${P314}55`,borderRadius:10,padding:14,margin:"14px 0",fontSize:14,color:P303,lineHeight:1.5}}>
                 📧 En breve recibirás un correo con el ID asignado para seguimiento.
               </div>
@@ -581,11 +1355,9 @@ function App(){
                 </select>
               </div>
             </Seccion>
-
             {newReq.servicio==="Carga Terrestre"&&<CamposCargaTerrestre req={newReq} setReq={setNewReq}/>}
             {newReq.servicio==="Izajes"&&<CamposIzajes req={newReq} setReq={setNewReq}/>}
             {newReq.servicio==="Provisión de GasOil"&&<CamposGasOil req={newReq} setReq={setNewReq}/>}
-
             {newReq.servicio&&EQUIPOS_POR_SERVICIO[newReq.servicio]!==undefined&&(
               <Seccion titulo="🔧 Recursos Solicitados">
                 <RecursosEditor recursos={newReq.recursosSolicitados} onChange={v=>setNewReq(p=>({...p,recursosSolicitados:v}))} servicio={newReq.servicio} asignacion={false}/>
@@ -593,9 +1365,22 @@ function App(){
             )}
             <Seccion titulo="👤 Personas de Contacto"><PersonasEditor personas={newReq.contactos} onChange={v=>setNewReq(p=>({...p,contactos:v}))} titulo="contacto"/></Seccion>
             <Seccion titulo="📄 Responsables del Permiso de Trabajo"><PersonasEditor personas={newReq.responsablesPermiso} onChange={v=>setNewReq(p=>({...p,responsablesPermiso:v}))} titulo="responsable"/></Seccion>
-            <Seccion titulo="💰 Imputación del Costo *">
-              <input style={S.input(errors.imputacionCosto)} value={newReq.imputacionCosto} onChange={e=>{setNewReq(p=>({...p,imputacionCosto:e.target.value}));setErrors(p=>({...p,imputacionCosto:false}));}} placeholder="Ej: CC-1234 / OT-5678 / Proyecto Norte..."/>
-              {errors.imputacionCosto&&<span style={S.err}>Campo requerido</span>}
+            <Seccion titulo="💰 Imputación & Costo Estimado">
+              <div style={S.field}><label style={S.label}>Imputación del Costo *</label>
+                <input style={S.input(errors.imputacionCosto)} value={newReq.imputacionCosto} onChange={e=>{setNewReq(p=>({...p,imputacionCosto:e.target.value}));setErrors(p=>({...p,imputacionCosto:false}));}} placeholder="Ej: CC-1234 / OT-5678 / Proyecto Norte..."/>
+                {errors.imputacionCosto&&<span style={S.err}>Campo requerido</span>}
+              </div>
+              <div className="grid-2">
+                <div style={S.field}><label style={S.label}>Costo Estimado</label>
+                  <input style={S.input()} value={newReq.costoEstimado} onChange={e=>setNewReq(p=>({...p,costoEstimado:e.target.value.replace(/[^\d.]/g,"")}))} placeholder="Ej: 15000" type="text" inputMode="decimal"/>
+                  <span style={{fontSize:11,color:"#9ca3af"}}>Opcional pero recomendado para control presupuestario</span>
+                </div>
+                <div style={S.field}><label style={S.label}>Moneda</label>
+                  <select style={S.input()} value={newReq.moneda} onChange={e=>setNewReq(p=>({...p,moneda:e.target.value}))}>
+                    {MONEDAS.map(m=><option key={m} value={m}>{m}</option>)}
+                  </select>
+                </div>
+              </div>
             </Seccion>
             <Seccion titulo="📝 Observaciones">
               <textarea style={{...S.input(),height:90,resize:"vertical"}} value={newReq.observaciones} onChange={e=>setNewReq(p=>({...p,observaciones:e.target.value}))} placeholder="Información adicional relevante..."/>
@@ -609,18 +1394,17 @@ function App(){
       </div>
     </div>
   );
-
-  // ── LOGÍSTICA ─────────────────────────────────────────────────────────────
   return(
     <div style={{minHeight:"100vh",background:"#f1f5f9"}}>
       <StatusBar online={online} pendingWrites={pending}/>
       {navHeader("📊 Programación Logística","Gestión y asignación de requerimientos",
-        <div style={{display:"flex",gap:8}}>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          <button onClick={()=>setView("calendario")} style={{background:"rgba(255,255,255,.15)",color:"#fff",border:"1px solid rgba(255,255,255,.3)",borderRadius:8,padding:"7px 12px",cursor:"pointer",fontSize:13,fontWeight:600,whiteSpace:"nowrap"}}>📅 Calendario</button>
           <button onClick={()=>exportExcel(filtered)} style={{background:"rgba(255,255,255,.15)",color:"#fff",border:"1px solid rgba(255,255,255,.3)",borderRadius:8,padding:"7px 12px",cursor:"pointer",fontSize:13,fontWeight:600,whiteSpace:"nowrap"}}>📊 Excel</button>
+          <button onClick={()=>exportScorecardJSON(reqs)} style={{background:"rgba(255,255,255,.15)",color:"#fff",border:"1px solid rgba(255,255,255,.3)",borderRadius:8,padding:"7px 12px",cursor:"pointer",fontSize:13,fontWeight:600,whiteSpace:"nowrap"}} title="Exportar performance de proveedores para el Scorecard">🎯 Scorecard</button>
           <button onClick={()=>setView("metricas")} style={{background:"rgba(255,255,255,.15)",color:"#fff",border:"1px solid rgba(255,255,255,.3)",borderRadius:8,padding:"7px 12px",cursor:"pointer",fontSize:13,fontWeight:600,whiteSpace:"nowrap"}}>📈 Métricas</button>
         </div>
       )}
-
       <div style={{maxWidth:1300,margin:"0 auto",padding:"20px 14px"}}>
         <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:18}}>
           <StatCard label="Total"       value={reqs.length} color={P303} icon="📋"/>
@@ -628,65 +1412,103 @@ function App(){
           <StatCard label="En Proceso"  value={enProceso}   color={P314} icon="⚙️"/>
           <StatCard label="Completados" value={completados} color="#10b981" icon="✅"/>
         </div>
-
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:18}}>
           <div style={{background:"#fff",borderRadius:10,padding:18,border:"1px solid #e5e7eb"}}><div style={{fontWeight:700,color:P303,marginBottom:12,fontSize:14}}>Por Servicio</div>{SERVICIOS.map(s=><MiniBar key={s} label={`${servicioIcon[s]} ${ABREV_SERVICIO[s]||s}`} value={reqs.filter(r=>r.servicio===s).length} max={maxSvc} color={P314}/>)}</div>
           <div style={{background:"#fff",borderRadius:10,padding:18,border:"1px solid #e5e7eb"}}><div style={{fontWeight:700,color:P303,marginBottom:12,fontSize:14}}>Por Estado</div>{ESTADOS.map(s=><MiniBar key={s} label={s} value={reqs.filter(r=>r.estado===s).length} max={reqs.length} color={estadoColor[s]}/>)}</div>
         </div>
-
-        <div style={{background:"#fff",borderRadius:10,padding:14,border:"1px solid #e5e7eb",marginBottom:14,display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
-          <input style={{flex:1,minWidth:160,padding:"10px 12px",borderRadius:8,border:"1.5px solid #d1d5db",fontSize:15,outline:"none"}} placeholder="🔍 Buscar..." value={search} onChange={e=>setSearch(e.target.value)}/>
-          <select style={{padding:"10px 12px",borderRadius:8,border:"1.5px solid #d1d5db",fontSize:14,WebkitAppearance:"none"}} value={filtroS} onChange={e=>setFiltroS(e.target.value)}>
-            <option value="">Todos los servicios</option>{SERVICIOS.map(s=><option key={s} value={s}>{s}</option>)}
-          </select>
-          <select style={{padding:"10px 12px",borderRadius:8,border:"1.5px solid #d1d5db",fontSize:14,WebkitAppearance:"none"}} value={filtroE} onChange={e=>setFiltroE(e.target.value)}>
-            <option value="">Todos los estados</option>{ESTADOS.map(s=><option key={s} value={s}>{s}</option>)}
-          </select>
+        <div style={{background:"#fff",borderRadius:10,padding:14,border:"1px solid #e5e7eb",marginBottom:14,display:"grid",gap:10}}>
+          <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center"}}>
+            <input style={{flex:1,minWidth:160,padding:"10px 12px",borderRadius:8,border:"1.5px solid #d1d5db",fontSize:15,outline:"none"}} placeholder="🔍 ID, área, locación, imputación, contacto..." value={search} onChange={e=>setSearch(e.target.value)}/>
+            <select style={{padding:"10px 12px",borderRadius:8,border:"1.5px solid #d1d5db",fontSize:14,WebkitAppearance:"none"}} value={filtroS} onChange={e=>setFiltroS(e.target.value)}>
+              <option value="">Todos los servicios</option>{SERVICIOS.map(s=><option key={s} value={s}>{s}</option>)}
+            </select>
+            <select style={{padding:"10px 12px",borderRadius:8,border:"1.5px solid #d1d5db",fontSize:14,WebkitAppearance:"none"}} value={filtroE} onChange={e=>setFiltroE(e.target.value)}>
+              <option value="">Todos los estados</option>{ESTADOS.map(s=><option key={s} value={s}>{s}</option>)}
+            </select>
+            <select style={{padding:"10px 12px",borderRadius:8,border:"1.5px solid #d1d5db",fontSize:14,WebkitAppearance:"none",maxWidth:180}} value={fProveedor} onChange={e=>setFProveedor(e.target.value)}>
+              <option value="">Todos los proveedores</option>{proveedoresUnicos.map(p=><option key={p} value={p}>{p}</option>)}
+            </select>
+          </div>
+          <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"center",fontSize:13,color:"#6b7280"}}>
+            <label style={{whiteSpace:"nowrap"}}>Fecha req. desde: <input type="date" value={fFechaDesde} onChange={e=>setFFechaDesde(e.target.value)} style={{padding:"6px 8px",borderRadius:6,border:"1px solid #d1d5db",marginLeft:4,fontSize:13}}/></label>
+            <label style={{whiteSpace:"nowrap"}}>hasta: <input type="date" value={fFechaHasta} onChange={e=>setFFechaHasta(e.target.value)} style={{padding:"6px 8px",borderRadius:6,border:"1px solid #d1d5db",marginLeft:4,fontSize:13}}/></label>
+            <label style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer"}}><input type="checkbox" checked={fSoloVencidos} onChange={e=>setFSoloVencidos(e.target.checked)}/> Solo vencidos</label>
+            <label style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer"}}><input type="checkbox" checked={fSoloReprog} onChange={e=>setFSoloReprog(e.target.checked)}/> Con reprogramación</label>
+            {(fFechaDesde||fFechaHasta||fProveedor||fSoloVencidos||fSoloReprog)&&
+              <button onClick={()=>{setFFechaDesde("");setFFechaHasta("");setFProveedor("");setFSoloVencidos(false);setFSoloReprog(false);}} style={{padding:"5px 10px",background:"#fef2f2",color:"#ef4444",border:"1px solid #fecaca",borderRadius:6,fontSize:12,cursor:"pointer",fontWeight:600}}>Limpiar filtros</button>}
+            <span style={{marginLeft:"auto",fontWeight:600,color:P303}}>{filtered.length} de {reqs.length}</span>
+          </div>
+          {/* Alertas visuales */}
+          {(()=>{
+            const venc = reqs.filter(estaVencido).length;
+            const prox = reqs.filter(proximoAVencer).length;
+            const urgSin = reqs.filter(r=>(r.prioridad==="Urgente"||r.prioridad==="Alta")&&r.estado==="Pendiente").length;
+            if(venc+prox+urgSin===0) return null;
+            return <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              {venc>0&&<span style={{background:"#fef2f2",color:"#991b1b",border:"1px solid #fecaca",borderRadius:6,padding:"4px 10px",fontSize:12,fontWeight:700,cursor:"pointer"}} onClick={()=>setFSoloVencidos(true)}>⚠️ {venc} vencidos</span>}
+              {prox>0&&<span style={{background:"#fffbeb",color:"#92400e",border:"1px solid #fde68a",borderRadius:6,padding:"4px 10px",fontSize:12,fontWeight:700}}>⏰ {prox} próximos a vencer (&lt;48hs)</span>}
+              {urgSin>0&&<span style={{background:"#fef2f2",color:"#991b1b",border:"1px solid #fecaca",borderRadius:6,padding:"4px 10px",fontSize:12,fontWeight:700}}>🚨 {urgSin} urgentes/altos sin asignar</span>}
+            </div>;
+          })()}
         </div>
-
         <div style={{background:"#fff",borderRadius:10,border:"1px solid #e5e7eb",overflow:"hidden"}}>
-          <div style={{overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
-            <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+          <div className="tbl-scroll">
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:13,minWidth:1600}}>
               <thead><tr style={{background:"#f8fafc",borderBottom:`2px solid ${P314}44`}}>
-                {["ID","Fecha","Área","Locación","Servicio","Fecha Req.","Prioridad","Estado","Rec. Solicitados","Rec. Asignados","Contactos","Imputación","Archivos","Acciones"].map(h=>(
+                {["ID","Fecha","Área","Locación","Servicio","Fecha Req.","Prioridad","Estado","Rec. Solicitados","Rec. Asignados","Contactos","Imputación","Costo","SLA","Reprog","Archivos","Acciones"].map(h=>(
                   <th key={h} style={{padding:"11px 13px",textAlign:"left",fontWeight:700,color:P303,whiteSpace:"nowrap"}}>{h}</th>
                 ))}
               </tr></thead>
               <tbody>
-                {filtered.length===0&&<tr><td colSpan={14} style={{padding:32,textAlign:"center",color:"#9ca3af"}}>No hay requerimientos</td></tr>}
-                {filtered.map((r,i)=>(
-                  <tr key={r._docId||i} style={{borderBottom:"1px solid #f3f4f6",background:i%2===0?"#fff":"#f9fbfc"}}>
+                {filtered.length===0&&<tr><td colSpan={17} style={{padding:32,textAlign:"center",color:"#9ca3af"}}>No hay requerimientos</td></tr>}
+                {filtered.map((r,i)=>{
+                  const venc = estaVencido(r);
+                  const prox = proximoAVencer(r);
+                  const sla = calcSLA(r);
+                  const rowBg = venc?"#fef2f2":(prox?"#fffbeb":(i%2===0?"#fff":"#f9fbfc"));
+                  return (
+                  <tr key={r._docId||i} style={{borderBottom:"1px solid #f3f4f6",background:rowBg}}>
                     <td style={{padding:"10px 13px",fontWeight:700,color:P303,whiteSpace:"nowrap"}}>{r.id||<span style={{color:"#d1d5db",fontWeight:400,fontStyle:"italic"}}>Sin ID</span>}</td>
                     <td style={{padding:"10px 13px",color:"#6b7280",whiteSpace:"nowrap"}}>{r.fechaCreacion}</td>
                     <td style={{padding:"10px 13px",maxWidth:120,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.area}</td>
                     <td style={{padding:"10px 13px",whiteSpace:"nowrap"}}><Badge color={P314} text={`📍 ${r.locacion}`}/></td>
                     <td style={{padding:"10px 13px",whiteSpace:"nowrap"}}><Badge color={P303} text={`${servicioIcon[r.servicio]} ${r.servicio}`}/></td>
-                    <td style={{padding:"10px 13px",whiteSpace:"nowrap"}}>{r.fechaRequerida}</td>
+                    <td style={{padding:"10px 13px",whiteSpace:"nowrap"}}>{r.fechaRequerida}{venc&&<span style={{marginLeft:6,color:"#ef4444",fontWeight:700}}>⚠️</span>}{prox&&!venc&&<span style={{marginLeft:6,color:"#c98a00"}}>⏰</span>}</td>
                     <td style={{padding:"10px 13px"}}><Badge color={prioridadColor[r.prioridad]} text={r.prioridad}/></td>
                     <td style={{padding:"10px 13px"}}><Badge color={estadoColor[r.estado]} text={r.estado}/></td>
                     <td style={{padding:"10px 13px",maxWidth:160,fontSize:12}}>{(r.recursosSolicitados||[]).map((rs,idx)=><div key={idx} style={{whiteSpace:"nowrap"}}>🔸 {rs.equipo==="__custom__"?rs.custom:rs.equipo} <strong>×{rs.cantidad}</strong></div>)}</td>
-                    <td style={{padding:"10px 13px",maxWidth:160,fontSize:12}}>{!(r.recursosAsignados||[]).length?<span style={{color:"#d1d5db"}}>Sin asignar</span>:(r.recursosAsignados||[]).map((ra,idx)=><div key={idx} style={{whiteSpace:"nowrap",color:"#10b981"}}>✅ {ra.equipo==="__custom__"?ra.custom:ra.equipo} <strong>×{ra.cantidad}</strong></div>)}</td>
+                    <td style={{padding:"10px 13px",maxWidth:160,fontSize:12}}>{!(r.recursosAsignados||[]).length?<span style={{color:"#d1d5db"}}>Sin asignar</span>:(r.recursosAsignados||[]).map((ra,idx)=><div key={idx} style={{whiteSpace:"nowrap",color:"#10b981"}}>✅ {ra.equipo==="__custom__"?ra.custom:ra.equipo} <strong>×{ra.cantidad}</strong>{ra.proveedor&&<div style={{fontSize:11,color:"#6b7280",marginLeft:14}}>{ra.proveedor}</div>}</div>)}</td>
                     <td style={{padding:"10px 13px",fontSize:12,maxWidth:140}}>{(r.contactos||[]).filter(c=>c.nombre).map((c,idx)=><div key={idx} style={{whiteSpace:"nowrap"}}>👤 {c.nombre} {c.telefono&&<a href={`https://wa.me/549${c.telefono}`} target="_blank" rel="noreferrer" style={{color:"#25d366",textDecoration:"none"}}>📱</a>}</div>)}</td>
                     <td style={{padding:"10px 13px",fontSize:12,color:r.imputacionCosto?"#374151":"#d1d5db",whiteSpace:"nowrap"}}>{r.imputacionCosto||"—"}</td>
+                    <td style={{padding:"10px 13px",fontSize:12,whiteSpace:"nowrap"}}>
+                      {r.costoEstimado?<div style={{color:"#6b7280"}}>Est: {fmtMoneda(r.costoEstimado,r.moneda)}</div>:<span style={{color:"#d1d5db"}}>—</span>}
+                      {r.costoReal&&<div style={{color:"#111",fontWeight:600}}>Real: {fmtMoneda(r.costoReal,r.moneda)}</div>}
+                      {(()=>{const d=desvioCosto(r); if(d===null)return null; const c=d>10?"#ef4444":d<-10?"#10b981":"#6b7280"; return <div style={{fontSize:11,color:c,fontWeight:600}}>{d>0?"+":""}{d.toFixed(1)}%</div>;})()}
+                    </td>
+                    <td style={{padding:"10px 13px",whiteSpace:"nowrap"}}>
+                      {sla==="cumplido"&&<Badge color="#10b981" text="✓ OK"/>}
+                      {sla==="incumplido"&&<Badge color="#ef4444" text="✗ Fuera"/>}
+                      {sla==="pendiente"&&<span style={{color:"#d1d5db",fontSize:12}}>—</span>}
+                    </td>
+                    <td style={{padding:"10px 13px",whiteSpace:"nowrap",textAlign:"center"}}>{r.reprogramaciones>0?<Badge color="#7c3aed" text={`🔄 ${r.reprogramaciones}`}/>:<span style={{color:"#d1d5db"}}>0</span>}</td>
                     <td style={{padding:"10px 13px",whiteSpace:"nowrap",fontSize:12}}><span style={{color:(r.archivos||[]).length>0?P314:"#d1d5db",fontWeight:600}}>📎 {(r.archivos||[]).length}</span></td>
                     <td style={{padding:"10px 13px",whiteSpace:"nowrap"}}>
-                      <div style={{display:"flex",gap:5}}>
+                      <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
                         {r.estado!=="Completado"&&r.estado!=="Cancelado"&&(
                           <button onClick={()=>abrirAsignar(r)} style={{background:"#e6f4f8",color:P303,border:`1px solid ${P314}55`,borderRadius:6,padding:"5px 10px",cursor:"pointer",fontSize:12,fontWeight:600,touchAction:"manipulation"}}>{r.estado==="Pendiente"?"Asignar":"Editar"}</button>
                         )}
-                        {r.estado==="En Proceso"&&<button onClick={()=>completar(r)} style={{background:"#f0fdf4",color:"#10b981",border:"1px solid #bbf7d0",borderRadius:6,padding:"5px 10px",cursor:"pointer",fontSize:12,fontWeight:600}}>✓</button>}
-                        {r.estado==="Pendiente"&&<button onClick={()=>cancelar(r)} style={{background:"#fef2f2",color:"#ef4444",border:"1px solid #fecaca",borderRadius:6,padding:"5px 10px",cursor:"pointer",fontSize:12,fontWeight:600}}>✕</button>}
+                        {r.estado==="En Proceso"&&<button onClick={()=>abrirCierre(r)} style={{background:"#f0fdf4",color:"#10b981",border:"1px solid #bbf7d0",borderRadius:6,padding:"5px 10px",cursor:"pointer",fontSize:12,fontWeight:600}} title="Completar">✓ Cerrar</button>}
+                        {(r.estado==="Pendiente"||r.estado==="En Proceso")&&<button onClick={()=>abrirCancelacion(r)} style={{background:"#fef2f2",color:"#ef4444",border:"1px solid #fecaca",borderRadius:6,padding:"5px 10px",cursor:"pointer",fontSize:12,fontWeight:600}} title="Cancelar">✕</button>}
+                        <button onClick={()=>generarOT(r)} style={{background:"#f3f4f6",color:"#374151",border:"1px solid #d1d5db",borderRadius:6,padding:"5px 10px",cursor:"pointer",fontSize:12,fontWeight:600}} title="Generar Orden de Trabajo PDF">📄 OT</button>
                       </div>
                     </td>
-                  </tr>
-                ))}
+                  </tr>);
+                })}
               </tbody>
             </table>
           </div>
         </div>
       </div>
-
-      {/* Modal Asignar */}
       {asignando&&(
         <div style={{position:"fixed",inset:0,background:"#0008",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:100}} onClick={e=>{if(e.target===e.currentTarget)setAsignando(null);}}>
           <div style={{background:"#fff",borderRadius:"16px 16px 0 0",padding:22,width:"100%",maxWidth:760,maxHeight:"92vh",overflowY:"auto",boxShadow:"0 -8px 40px #0003",animation:"fadeIn .25s ease"}}>
@@ -706,7 +1528,6 @@ function App(){
               <input style={S.input()} value={asignForm.id} onChange={e=>setAsignForm(p=>({...p,id:e.target.value}))} placeholder="Ej: SOL-001, OT-2345..."/>
               {asignando.emailSolicitante&&asignForm.id&&asignForm.id!==asignando.id&&<span style={{fontSize:11,color:"#10b981",marginTop:3,display:"block"}}>📧 Se enviará email a {asignando.emailSolicitante} al guardar</span>}
             </div>
-
             {asignando.servicio==="Carga Terrestre"&&(asignando.origen||asignando.destino)&&(
               <div style={{background:"#e6f4f8",border:`1px solid ${P314}55`,borderRadius:8,padding:"12px 14px",marginBottom:12,fontSize:13}}>
                 <div style={{fontWeight:700,color:P303,marginBottom:8}}>🚛 Datos de Carga</div>
@@ -746,10 +1567,8 @@ function App(){
               <div style={{fontSize:13,fontWeight:700,color:"#92400e",marginBottom:8}}>📋 Recursos Solicitados</div>
               {(asignando.recursosSolicitados||[]).map((rs,i)=><div key={i} style={{fontSize:13,color:"#78350f",marginBottom:4}}>🔸 <strong>{rs.equipo==="__custom__"?rs.custom:rs.equipo}</strong> ×{rs.cantidad}</div>)}
             </div>
-
             <div style={{fontWeight:700,color:P303,fontSize:14,marginBottom:10}}>⚙️ Recursos a Asignar</div>
             <RecursosEditor recursos={asignForm.recursosAsignados} onChange={v=>setAsignForm(p=>({...p,recursosAsignados:v}))} servicio={asignando.servicio} asignacion={true}/>
-
             <div style={{marginTop:14}}>
               <label style={S.label}>Fecha y Hora Programada</label>
               <input type="datetime-local" style={S.input()} value={asignForm.fechaProgramada} onChange={e=>setAsignForm(p=>({...p,fechaProgramada:e.target.value}))}/>
@@ -758,6 +1577,15 @@ function App(){
               <div style={{fontWeight:700,color:P303,fontSize:14,marginBottom:10}}>📎 Archivos Adjuntos</div>
               <ArchivosAdjuntos docId={asignando._docId} archivos={asignando.archivos||[]} editable={true}/>
             </div>
+            <div style={{marginTop:16,padding:"12px 14px",background:"#f8fafc",border:"1px solid #e5e7eb",borderRadius:8}}>
+              <div style={{fontSize:13,fontWeight:700,color:P303,marginBottom:10}}>💰 Costo Estimado (actualizable)</div>
+              <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:8}}>
+                <input style={S.input()} placeholder="Costo estimado" value={asignForm.costoEstimado||""} onChange={e=>setAsignForm(p=>({...p,costoEstimado:e.target.value.replace(/[^\d.]/g,"")}))}/>
+                <select style={S.input()} value={asignForm.moneda||asignando.moneda||"USD"} onChange={e=>setAsignForm(p=>({...p,moneda:e.target.value}))}>
+                  {MONEDAS.map(m=><option key={m} value={m}>{m}</option>)}
+                </select>
+              </div>
+            </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 2fr",gap:10,marginTop:20}}>
               <button onClick={()=>setAsignando(null)} style={{background:"#f3f4f6",color:"#374151",border:"none",borderRadius:10,padding:14,fontWeight:600,cursor:"pointer",fontSize:15,touchAction:"manipulation"}}>Cancelar</button>
               <button onClick={guardarAsignacion} style={{background:GRAD,color:"#fff",border:"none",borderRadius:10,padding:14,fontWeight:700,cursor:"pointer",fontSize:15,touchAction:"manipulation"}}>Guardar Asignación</button>
@@ -765,10 +1593,85 @@ function App(){
           </div>
         </div>
       )}
+
+      {/* ============= MODAL CIERRE ============= */}
+      {cerrando&&(
+        <div style={{position:"fixed",inset:0,background:"#0008",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:100}} onClick={e=>{if(e.target===e.currentTarget)setCerrando(null);}}>
+          <div style={{background:"#fff",borderRadius:"16px 16px 0 0",padding:22,width:"100%",maxWidth:680,maxHeight:"92vh",overflowY:"auto",boxShadow:"0 -8px 40px #0003",animation:"fadeIn .25s ease"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+              <div><h3 style={{color:"#10b981",fontSize:17,margin:0}}>✅ Cerrar Requerimiento</h3><div style={{color:"#6b7280",fontSize:13,marginTop:2}}>{cerrando.id} · {servicioIcon[cerrando.servicio]} {cerrando.servicio}</div></div>
+              <button onClick={()=>setCerrando(null)} style={{background:"#f3f4f6",border:"none",borderRadius:8,padding:"8px 12px",cursor:"pointer",fontSize:16}}>✕</button>
+            </div>
+            <div className="grid-2">
+              <div style={S.field}><label style={S.label}>Fecha inicio real</label>
+                <input type="date" style={S.input()} value={cierreForm.fechaInicioReal} onChange={e=>setCierreForm(p=>({...p,fechaInicioReal:e.target.value}))}/>
+              </div>
+              <div style={S.field}><label style={S.label}>Fecha fin real *</label>
+                <input type="date" style={S.input()} value={cierreForm.fechaFinReal} onChange={e=>setCierreForm(p=>({...p,fechaFinReal:e.target.value}))}/>
+              </div>
+            </div>
+            <div style={{marginTop:12}}>
+              <label style={S.label}>Costo real</label>
+              <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:8}}>
+                <input style={S.input()} placeholder="Ej: 15500" value={cierreForm.costoReal} onChange={e=>setCierreForm(p=>({...p,costoReal:e.target.value.replace(/[^\d.]/g,"")}))}/>
+                <span style={{padding:"12px 14px",background:"#f3f4f6",borderRadius:8,fontSize:13,color:"#6b7280",textAlign:"center"}}>{cerrando.moneda||"USD"}</span>
+              </div>
+              {cerrando.costoEstimado&&<span style={{fontSize:11,color:"#6b7280",marginTop:4,display:"block"}}>Estimado: {fmtMoneda(cerrando.costoEstimado,cerrando.moneda)}</span>}
+            </div>
+            <div style={{marginTop:12}}>
+              <label style={S.label}>Eventos HSE</label>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                {EVENTOS_HSE.map(ev=>{
+                  const checked = (cierreForm.eventosHSE||[]).includes(ev);
+                  return <label key={ev} style={{display:"inline-flex",alignItems:"center",gap:6,padding:"6px 10px",background:checked?P314+"22":"#f3f4f6",border:`1px solid ${checked?P314:"#d1d5db"}`,borderRadius:6,fontSize:12,cursor:"pointer",fontWeight:checked?600:400,color:checked?P303:"#374151"}}>
+                    <input type="checkbox" checked={checked} onChange={e=>{
+                      const cur=cierreForm.eventosHSE||[];
+                      setCierreForm(p=>({...p,eventosHSE: e.target.checked? [...cur,ev] : cur.filter(x=>x!==ev)}));
+                    }}/>{ev}
+                  </label>;
+                })}
+              </div>
+            </div>
+            <div style={{marginTop:12}}>
+              <label style={S.label}>Observaciones de cierre</label>
+              <textarea style={{...S.input(),height:80,resize:"vertical"}} value={cierreForm.observacionesCierre} onChange={e=>setCierreForm(p=>({...p,observacionesCierre:e.target.value}))} placeholder="Incidencias, demoras, comentarios del proveedor..."/>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 2fr",gap:10,marginTop:20}}>
+              <button onClick={()=>setCerrando(null)} style={{background:"#f3f4f6",color:"#374151",border:"none",borderRadius:10,padding:14,fontWeight:600,cursor:"pointer",fontSize:15}}>Cancelar</button>
+              <button onClick={guardarCierre} style={{background:"#10b981",color:"#fff",border:"none",borderRadius:10,padding:14,fontWeight:700,cursor:"pointer",fontSize:15}}>Guardar cierre</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============= MODAL CANCELACIÓN ============= */}
+      {cancelando&&(
+        <div style={{position:"fixed",inset:0,background:"#0008",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:100}} onClick={e=>{if(e.target===e.currentTarget)setCancelando(null);}}>
+          <div style={{background:"#fff",borderRadius:"16px 16px 0 0",padding:22,width:"100%",maxWidth:560,boxShadow:"0 -8px 40px #0003"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+              <div><h3 style={{color:"#ef4444",fontSize:17,margin:0}}>✕ Cancelar Requerimiento</h3><div style={{color:"#6b7280",fontSize:13,marginTop:2}}>{cancelando.id} · {cancelando.servicio}</div></div>
+              <button onClick={()=>setCancelando(null)} style={{background:"#f3f4f6",border:"none",borderRadius:8,padding:"8px 12px",cursor:"pointer",fontSize:16}}>✕</button>
+            </div>
+            <div style={S.field}><label style={S.label}>Motivo *</label>
+              <select style={S.input()} value={cancelForm.motivoCancelacion} onChange={e=>setCancelForm(p=>({...p,motivoCancelacion:e.target.value}))}>
+                <option value="">Seleccioná motivo...</option>
+                {MOTIVOS_CANCELACION.map(m=><option key={m} value={m}>{m}</option>)}
+              </select>
+            </div>
+            <div style={{marginTop:12}}>
+              <label style={S.label}>Detalle / observación</label>
+              <textarea style={{...S.input(),height:70,resize:"vertical"}} value={cancelForm.detalleCancelacion} onChange={e=>setCancelForm(p=>({...p,detalleCancelacion:e.target.value}))} placeholder="Explicación breve..."/>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 2fr",gap:10,marginTop:20}}>
+              <button onClick={()=>setCancelando(null)} style={{background:"#f3f4f6",color:"#374151",border:"none",borderRadius:10,padding:14,fontWeight:600,cursor:"pointer",fontSize:15}}>Volver</button>
+              <button onClick={guardarCancelacion} style={{background:"#ef4444",color:"#fff",border:"none",borderRadius:10,padding:14,fontWeight:700,cursor:"pointer",fontSize:15}}>Confirmar cancelación</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
-
 ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
 </script>
 </body>

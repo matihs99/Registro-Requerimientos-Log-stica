@@ -1,68 +1,67 @@
-const CACHE = 'req-logisticos-v1';
-
-// Archivos del shell de la app que se cachean al instalar
-const SHELL = [
+const CACHE_NAME = 'req-logisticos-v2';
+const PRECACHE_URLS = [
+  './',
   './index.html',
   './manifest.json',
-  './icon.svg'
+  './icon.svg',
+  'https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.7.0/jspdf.plugin.autotable.min.js',
+  'https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js'
 ];
 
-// Al instalar: cachear el shell inmediatamente
-self.addEventListener('install', e => {
-  self.skipWaiting();
-  e.waitUntil(
-    caches.open(CACHE).then(c => c.addAll(SHELL))
+// Install: pre-cache shell
+self.addEventListener('install', event => {
+  event.waitUntil(
+    caches.open(CACHE_NAME)
+      .then(cache => cache.addAll(PRECACHE_URLS))
+      .then(() => self.skipWaiting())
   );
 });
 
-// Al activar: eliminar caches viejos
-self.addEventListener('activate', e => {
-  self.clients.claim();
-  e.waitUntil(
+// Activate: clean old caches
+self.addEventListener('activate', event => {
+  event.waitUntil(
     caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
-    )
+      Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))
+    ).then(() => self.clients.claim())
   );
 });
 
-// Estrategia de fetch:
-// - Firestore API: dejar pasar sin interceptar (Firebase maneja offline)
-// - Todo lo demás: cache-first con actualización en background
-self.addEventListener('fetch', e => {
-  if (e.request.method !== 'GET') return;
+// Fetch: network-first for Firebase/API, cache-first for static assets
+self.addEventListener('fetch', event => {
+  const url = new URL(event.request.url);
 
-  // No interceptar llamadas a Firestore/Firebase (las maneja el SDK)
-  if (e.request.url.includes('firestore.googleapis.com') ||
-      e.request.url.includes('firebase.googleapis.com') ||
-      e.request.url.includes('identitytoolkit.googleapis.com')) {
+  // Skip non-GET requests
+  if (event.request.method !== 'GET') return;
+
+  // Firebase/Firestore requests: network only (Firestore handles its own offline cache)
+  if (url.hostname.includes('firebaseio.com') ||
+      url.hostname.includes('googleapis.com') ||
+      url.hostname.includes('firestore.googleapis.com') ||
+      url.hostname.includes('firebasestorage.googleapis.com')) {
     return;
   }
 
-  e.respondWith(
-    caches.open(CACHE).then(async cache => {
-      const cached = await cache.match(e.request);
-
-      // Intentar actualizar en background
-      const networkFetch = fetch(e.request).then(res => {
-        if (res && (res.ok || res.type === 'opaque')) {
-          cache.put(e.request, res.clone());
+  // Static assets: cache-first, fallback to network
+  event.respondWith(
+    caches.match(event.request).then(cached => {
+      if (cached) return cached;
+      return fetch(event.request).then(response => {
+        // Cache successful responses
+        if (response.ok && response.type === 'basic') {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
         }
-        return res;
-      }).catch(() => null);
-
-      // Si hay cache, devolver inmediatamente y actualizar en background
-      if (cached) {
-        networkFetch; // fire & forget
-        return cached;
-      }
-
-      // Si no hay cache, esperar la red
-      const networkRes = await networkFetch;
-      if (networkRes) return networkRes;
-
-      // Sin cache ni red: devolver el index.html (para navegación)
-      if (e.request.mode === 'navigate') {
-        return cache.match('./index.html');
+        return response;
+      });
+    }).catch(() => {
+      // Offline fallback for navigation
+      if (event.request.mode === 'navigate') {
+        return caches.match('./index.html');
       }
     })
   );

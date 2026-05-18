@@ -1,21 +1,22 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <!-- Fondo -->
-  <rect width="512" height="512" fill="#2563eb" rx="90"/>
-  <!-- Torre de grúa vertical -->
-  <rect x="236" y="120" width="36" height="260" fill="white" rx="6"/>
-  <!-- Brazo horizontal -->
-  <rect x="90" y="120" width="300" height="32" fill="white" rx="6"/>
-  <!-- Contrapeso -->
-  <rect x="78" y="152" width="70" height="55" fill="#93c5fd" rx="6"/>
-  <!-- Cable -->
-  <rect x="352" y="152" width="7" height="110" fill="white"/>
-  <!-- Gancho -->
-  <path d="M355 262 Q380 280 358 308 Q338 326 348 348" stroke="white" stroke-width="9" fill="none" stroke-linecap="round"/>
-  <!-- Base -->
-  <rect x="196" y="368" width="116" height="28" fill="white" rx="6"/>
-  <!-- Ruedas -->
-  <circle cx="228" cy="412" r="26" fill="#1d4ed8"/>
-  <circle cx="284" cy="412" r="26" fill="#1d4ed8"/>
-  <circle cx="228" cy="412" r="14" stroke="white" stroke-width="6" fill="none"/>
-  <circle cx="284" cy="412" r="14" stroke="white" stroke-width="6" fill="none"/>
+  <rect width="512" height="512" rx="96" fill="#002B45"/>
+  <g transform="translate(256,240)" fill="none" stroke="#0096B2" stroke-width="28" stroke-linecap="round" stroke-linejoin="round">
+    <!-- crane base -->
+    <line x1="-100" y1="120" x2="100" y2="120"/>
+    <line x1="0" y1="120" x2="0" y2="-80"/>
+    <!-- crane boom -->
+    <line x1="0" y1="-80" x2="120" y2="-80"/>
+    <!-- crane cable -->
+    <line x1="120" y1="-80" x2="120" y2="20" stroke-dasharray="8 8"/>
+    <!-- hook -->
+    <path d="M110,20 Q120,40 130,20" stroke-width="22"/>
+    <!-- truck body -->
+    <rect x="-140" y="60" width="120" height="60" rx="8" fill="#0096B2" stroke="none"/>
+    <rect x="-20" y="80" width="50" height="40" rx="6" fill="#0096B2" stroke="none"/>
+    <!-- wheels -->
+    <circle cx="-110" cy="124" r="16" fill="#002B45" stroke="#0096B2" stroke-width="10"/>
+    <circle cx="-50" cy="124" r="16" fill="#002B45" stroke="#0096B2" stroke-width="10"/>
+    <circle cx="10" cy="124" r="16" fill="#002B45" stroke="#0096B2" stroke-width="10"/>
+  </g>
+  <text x="256" y="430" text-anchor="middle" font-family="system-ui,sans-serif" font-weight="800" font-size="52" fill="white">REQ</text>
 </svg>
